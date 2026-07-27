@@ -10,6 +10,7 @@ from .models import (
     FaceEstrutura,
     Solo,
     Sobrecarga,
+    Reforco,
 )
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "FaceEstrutura",
     "Solo",
     "Sobrecarga",
+    "Reforco",
 ]

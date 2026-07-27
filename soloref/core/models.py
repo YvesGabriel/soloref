@@ -72,6 +72,25 @@ class Sobrecarga:
 
 
 # --------------------------------------------------------------------------- #
+# Aba: Reforço (geossintéticos)
+# --------------------------------------------------------------------------- #
+@dataclass
+class Reforco:
+    """Parâmetros do geossintético para o dimensionamento de reforço.
+
+    Valores default são ordens de grandeza típicas de geogrelhas usadas em
+    reforço de solo (FHWA GEC-011 / AASHTO), não uma especificação de
+    produto — o usuário deve ajustar conforme a ficha técnica do material.
+    """
+    tult_kN_m: float = 40.0             # resistência à tração última, Tult
+    rf_fluencia: float = 2.0            # RFcr — redução por fluência
+    rf_dano_instalacao: float = 1.1     # RFid — redução por dano de instalação
+    rf_degradacao: float = 1.1          # RFd — redução por degradação química/biológica
+    ci_interacao: float = 0.8           # Ci — coeficiente de interação solo-reforço (arrancamento)
+    fs_alvo: float = 1.5                # FS de projeto (espaçamento e ancoragem)
+
+
+# --------------------------------------------------------------------------- #
 # Projeto inteiro
 # --------------------------------------------------------------------------- #
 @dataclass
@@ -97,3 +116,4 @@ class Projeto:
         )
     )
     sobrecarga: Sobrecarga = field(default_factory=Sobrecarga)
+    reforco: Reforco = field(default_factory=Reforco)

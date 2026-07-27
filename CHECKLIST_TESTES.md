@@ -53,7 +53,7 @@ Clique em **ED** (toolbar) ou **Dimensionamento > Entrada de dados**.
 ### 5.1 Estrutura do diálogo
 
 - [ ] Título da janela: "**Entrada de dados**".
-- [ ] Aparecem **7 abas** na ordem: Solo de aterro · Solo de encosta · Solo de fundação · Geometria da estrutura · Face da estrutura · Sobrecarga · Identificação do projeto.
+- [ ] Aparecem **8 abas** na ordem: Solo de aterro · Solo de encosta · Solo de fundação · Geometria da estrutura · Face da estrutura · Sobrecarga · Reforço (geossintético) · Identificação do projeto.
 - [ ] À direita há um painel **"Esquema ilustrativo"** com um desenho do muro.
 - [ ] Na base direita há os botões **OK** e **Cancelar**.
 - [ ] Na base do diálogo, uma linha de status mostra "Dimensiona a estrutura."
@@ -91,6 +91,11 @@ Clique em **ED** (toolbar) ou **Dimensionamento > Entrada de dados**.
 - [ ] Campo **q** (sobrecarga uniforme) em vermelho.
 - [ ] Grupo "**Trem-tipo (sobrecarga linear)**" com P, xo, e.
 
+### 5.7b Aba Reforço (geossintético)
+
+- [ ] 6 campos com padrão: **Tult = 40** kN/m, **RFcr = 2,0**, **RFid = 1,1**, **RFd = 1,1**, **Ci = 0,8**, **FS = 1,5**.
+- [ ] Aparece observação vermelha sobre os valores default serem "ordens de grandeza típicas" (não uma especificação de produto).
+
 ### 5.8 Aba Identificação do projeto
 
 - [ ] Campos "Identificação do projeto" e "Empresa" editáveis.
@@ -127,8 +132,9 @@ Este é o mais divertido de testar. Volte para a aba **Geometria** e vá mudando
 - [ ] Caixa **"Hipóteses do método"** com 4 bullets começando por "Método de cálculo por equilíbrio limite…".
 - [ ] Checkbox "Não mostrar esta tela no dimensionamento".
 - [ ] Botões **Continuar · Fechar · Apoio**.
-- [ ] Clique **Continuar**: registra situação no Quadro Resumo e volta para a MDI.
-- [ ] Status bar mostra "Situação registrada (aba 0)".
+- [ ] Clique **Continuar**: roda `MetodoCoulomb().calcular(...)` de verdade, registra a situação no Quadro Resumo (com solicitação e cunha **reais**, não mais placeholder) e volta para a MDI.
+- [ ] Status bar mostra algo como "**Método de Coulomb: solicitação=X kN/m, cunha=Y°**" (com os defaults do projeto: X≈47,5, Y≈54,3 — depende do δ do solo de aterro).
+- [ ] `logs/soloref_app.log` ganha uma linha nova com a entrada completa e o `Resultado`.
 
 ### 6.2 Rankine (Rank)
 
@@ -147,11 +153,13 @@ Este é o mais divertido de testar. Volte para a aba **Geometria** e vá mudando
 - [ ] Aba ativa "**Método de Bishop (novo)**".
 - [ ] Marcada como (NOVO) no título da aba.
 - [ ] Hipóteses citam "superfície de ruptura circular dividida em fatias".
+- [ ] Clique **Continuar**: roda `MetodoBishop().calcular(...)` de verdade (busca do círculo crítico) e loga em `logs/soloref_app.log`. **Conhecido/cosmético**: a status bar mostra "solicitação=0 kN/m, cunha=0°" mesmo com o FS calculado corretamente — Bishop não usa esses dois campos, usa `fator_seguranca` (não exibido na status bar ainda). Bishop também ainda não tem linha própria no Quadro Resumo.
 
 ### 6.5 Reforço (Ref) — extensão
 
 - [ ] Aba ativa "**Reforço com geossintéticos (novo)**".
 - [ ] Hipóteses citam "número de camadas" e "fator de segurança alvo".
+- [ ] Clique **Continuar**: roda `MetodoGeossintetico().calcular(...)` de verdade (nº de camadas, Sv, La, Le) e loga. Mesma ressalva cosmética do Bishop: status bar mostra "solicitação=0"; sem linha própria no Quadro Resumo ainda.
 
 ### 6.6 Ext e Rela
 
@@ -167,9 +175,10 @@ Clique em **Resu** ou faça vários **Coul/Rank/DB**.
 - [ ] Título: "Quadro comparativo da análise da estabilidade interna nas últimas oito situações consideradas".
 - [ ] A tabela tem **23 linhas** com os rótulos corretos (situação, altura, inclinação da face, …, 2ª inclinação da cunha).
 - [ ] A tabela tem **8 colunas** de dados (números 1 a 8), além da coluna dos rótulos.
-- [ ] Registrar 1 situação preenche apenas a coluna 1. As demais mostram **$$$$$$$$$$** (placeholder).
+- [ ] Registrar 1 situação preenche apenas a coluna 1. As demais mostram **—** (célula vazia).
 - [ ] Registrar 9 situações: a mais antiga é **descartada**, a mais nova entra na última coluna (comportamento FIFO).
-- [ ] Os valores "solicit. Coulomb" etc. aparecem como **$$$$$$$$$$** porque os métodos ainda são placeholders — isso é **esperado nesta fase**.
+- [ ] Rodar **Coul**, depois **Rank**, depois **DB**: os valores "solicit., Mét. Coulomb/Rankine/Dois Blocos" e as respectivas cunhas aparecem com **números reais** (não mais placeholder). As linhas de Dois Blocos (ponto de inflexão, 1ª/2ª inclinação da cunha) continuam em **—**: só a solicitação e a 1ª cunha estão ligadas ao Quadro Resumo hoje.
+- [ ] Rodar **Bish** ou **Ref**: essas linhas continuam em **—** no Quadro Resumo — os dois métodos calculam de verdade (conferir no `logs/soloref_app.log` ou na status bar), mas ainda não têm linha própria na tabela (pendência conhecida, ver GUIA_DESENVOLVEDOR.md §3.4).
 
 ---
 
@@ -225,7 +234,7 @@ Coloque o print original e a versão nova lado a lado:
 
 ## 12. Robustez e casos-limite 🟡
 
-- [ ] Abrir ED, apagar tudo do campo H (deixar em 0), OK. O programa **não deve travar**. Ao chamar Coulomb (quando estiver implementado), deve tratar a divisão por zero.
+- [ ] Abrir ED, apagar tudo do campo H (deixar em 0), OK. O programa **não deve travar**. Rodar qualquer método (Coul/Rank/DB/Bish/Ref) com H=0: os 5 lançam `ValueError` internamente (geometria degenerada), capturado por `_mostrar_metodo` e mostrado como mensagem de erro na status bar — não deve fechar o programa nem poluir o Quadro Resumo com números sem sentido.
 - [ ] Digitar `-5` em γ (peso específico): idealmente o spinbox **não permite** valor negativo em campos que não fazem sentido negativo. Se aceitar, é um bug de validação a corrigir.
 - [ ] φ = 90° (impossível fisicamente): idealmente barrado (cap. em 60°). Se aceitar, é um bug de validação.
 - [ ] Salvar por cima de um arquivo aberto em outro programa: mensagem de erro amigável, não crash.
@@ -242,21 +251,41 @@ Coloque o print original e a versão nova lado a lado:
 
 ---
 
-## 14. Testes de cálculo (só depois que os métodos estiverem implementados) 🔴
+## 14. Testes de cálculo 🟢 (automatizados) / 🔴 (benchmarks pendentes)
 
-Quando você começar a implementar Coulomb (Cap. 6 da apostila), estes viram os
-testes de aceitação. Compare o resultado do software com os exercícios resolvidos
-da apostila:
+Os 5 métodos estão implementados e os casos abaixo já são **testes automatizados**
+(não precisam mais de verificação manual): `pytest tests/ -v` roda todos, e
+`python validar.py` gera `RELATORIO_VALIDACAO.md` com a mesma conferência num
+formato legível. Rode os dois e confira:
 
-- [ ] **Caso default do SoloRef** (H=4, γ=20, φ=30°, c=0, parede vertical, sem sobrecarga): Coulomb deve dar **Ea = 53,33 kN/m** e θ = 60°.
-- [ ] **Rankine mesmo caso**: idêntico a Coulomb (Ea = 53,33; θ = 60°).
-- [ ] **Rankine com c = 10**: Ea = 17,13 kN/m; zt = 1,73 m.
-- [ ] **Coulomb com δ = 20°**: Ka = 0,297; Ea = 47,5 kN/m.
-- [ ] **Rankine com terreno inclinado i = 15°**: Ka = 0,373; Ea = 59,7 kN/m.
-- [ ] **Bishop com 3 fatias (exercício 8.1 da apostila)**: FS = 1,39 (não parar na primeira iteração).
-- [ ] **Geossintético caso default**: Tadm = 18 kN/m; N = 9 camadas; Sv = 0,44 m.
+- [ ] `pytest tests/ -v` — **todos os testes passam**.
+- [ ] `python validar.py` termina com `EXIT: 0` e imprime "9/9 campos aprovados".
+- [ ] `RELATORIO_VALIDACAO.md` mostra **Taxa de aprovação geral: 9/9 (100.0%)**.
 
-Recomendo transformar cada um desses em um teste em `tests/test_methods.py`.
+Os valores de referência (dataset em `tests/casos_literatura.py`, seção 4.1 do
+`PLANO_IMPLEMENTACAO.md`) — **substituem** os números da apostila que estavam
+antes aqui, que não foram conferidos contra as convenções desta reimplementação:
+
+| id | método | caso | esperado |
+|---|---|---|---|
+| RANK-01 | Rankine | H=4, γ=20, φ=30°, c=0 | Ea=53,333 kN/m; cunha=60° |
+| RANK-02 | Rankine | H=6, γ=17,5, φ=20°, c=10 | Ea=70,417 kN/m; z0=1,632 m |
+| RANK-03 | Rankine (talude) | i=10°, φ=30° | Ka=0,34952 |
+| COUL-01 | Coulomb (degenerado) | θ=0, δ=0, i=0, φ=30° | Ka=0,33333 (= Rankine) |
+| COUL-02 | Coulomb | δ=15°, θ=0, i=0, φ=30° | Ka=0,30142 |
+| BISH-01 | Bishop (talude infinito) | c=0, φ=30°, β=20° | FS=1,5863 |
+| GEO-01 | Geossintético (consistência) | H=4, γ=20, φ=30°, c=0 | ΣTmax ≈ Ea_Rankine (53,333) |
+
+**Pendências** (não fabricar números — pedir a referência exata antes de preencher):
+
+- [ ] Benchmark de exemplo resolvido de livro (Das ou Craig) para Bishop — ver TODO no topo de `tests/test_bishop.py`.
+- [ ] Benchmark de exemplo resolvido FHWA/livro para Geossintéticos — ver TODO no topo de `tests/test_geossintetico.py`.
+- [ ] Casos em `tests/casos_referencia_original.csv` (conferência com o programa antigo) — vazio por padrão, ver PLANO_IMPLEMENTACAO.md §5.
+
+Verificação manual complementar (rápida, opcional já que o automatizado cobre o cálculo em si):
+
+- [ ] Na UI, com os defaults do projeto, rodar **Rank**: Quadro Resumo mostra solicitação≈53,33 kN/m, cunha=60°.
+- [ ] Rodar **Coul** com os defaults (δ=30° padrão do solo de aterro): solicitação≈47,5 kN/m — **menor** que Rankine, por causa do atrito muro-solo.
 
 ---
 

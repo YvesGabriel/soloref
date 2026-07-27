@@ -6,17 +6,50 @@ os botões ED, Coul, Rank, DB, Ref, Ext, Resu, Rela.
 """
 from __future__ import annotations
 
+import logging
+from dataclasses import asdict
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QMdiArea, QMdiSubWindow, QMessageBox, QFileDialog, QToolBar,
 )
 
+from ..core.methods import (
+    MetodoCoulomb, MetodoRankine, MetodoDoisBlocos, MetodoBishop,
+    MetodoGeossintetico, Resultado,
+)
 from ..core.models import Projeto
 from ..core.persistence import salvar, carregar
 from .dialogs.entrada_dados import EntradaDadosDialog
 from .dialogs.metodo_info import MetodoInfoDialog
 from .dialogs.quadro_resumo import QuadroResumoWidget
+
+logger = logging.getLogger(__name__)
+
+# aba do MetodoInfoDialog (0..4) -> classe de método correspondente.
+_METODOS_POR_ABA = [
+    MetodoCoulomb, MetodoRankine, MetodoDoisBlocos, MetodoBishop, MetodoGeossintetico,
+]
+
+# classe de método -> chaves de solicitação/cunha no dict `resultados` do
+# QuadroResumoWidget. Bishop e Geossintético ainda não têm linha própria no
+# quadro (ver PLANO_IMPLEMENTACAO.md §6), então ficam de fora deste mapa.
+_CHAVES_RESUMO = {
+    MetodoCoulomb: ("coulomb_solicit", "coulomb_cunha"),
+    MetodoRankine: ("rankine_solicit", "rankine_cunha"),
+    MetodoDoisBlocos: ("db_solicit", "db_cunha1"),
+}
+
+
+def _resultado_calculado(resultado: Resultado) -> bool:
+    """Distingue um `Resultado` de verdade de um placeholder vazio.
+
+    Heurística temporária: um método ainda não implementado devolve
+    `Resultado(metodo=...)` com solicitação/cunha zeradas e `extras` vazio.
+    Vale até todos os métodos estarem implementados (aí sempre é True).
+    """
+    return bool(resultado.extras) or resultado.solicitacao_kN_m != 0.0 or resultado.inclinacao_cunha_g != 0.0
 
 
 class MainWindow(QMainWindow):
@@ -195,7 +228,7 @@ class MainWindow(QMainWindow):
 
     def _entrada_dados(self):
         dlg = EntradaDadosDialog(self.projeto, self)
-        if dlg.exec() == dlg.Accepted:
+        if dlg.exec():  # QDialog.exec() -> 1 (Accepted) / 0 (Rejected)
             self.projeto = dlg.resultado()
             self.statusBar().showMessage(
                 "Dados atualizados — pronto para dimensionar"
@@ -203,12 +236,41 @@ class MainWindow(QMainWindow):
 
     def _mostrar_metodo(self, aba: int):
         dlg = MetodoInfoDialog(self, aba_inicial=aba)
-        if dlg.exec() == dlg.Accepted:
-            # por enquanto só registra situação no quadro resumo
-            self._abrir_resumo(trazer_pra_frente=True)
-            self._resumo_widget.adicionar_situacao(self.projeto)
+        if not dlg.exec():  # QDialog.exec() -> 1 (Accepted) / 0 (Rejected)
+            return
+
+        metodo_cls = _METODOS_POR_ABA[aba]
+        metodo = metodo_cls()
+        try:
+            resultado = metodo.calcular(self.projeto)
+        except Exception as e:
+            logger.exception("Erro ao calcular %s", metodo.nome)
+            self.statusBar().showMessage(f"Erro ao calcular {metodo.nome}: {e}")
+            return
+
+        logger.info(
+            "Método executado: %s | entrada=%s | resultado=%s",
+            metodo.nome, asdict(self.projeto), asdict(resultado),
+        )
+
+        resultados: dict = {}
+        chaves = _CHAVES_RESUMO.get(metodo_cls)
+        if chaves and _resultado_calculado(resultado):
+            chave_solicit, chave_cunha = chaves
+            resultados[chave_solicit] = resultado.solicitacao_kN_m
+            resultados[chave_cunha] = resultado.inclinacao_cunha_g
+
+        self._abrir_resumo(trazer_pra_frente=True)
+        self._resumo_widget.adicionar_situacao(self.projeto, resultados)
+
+        if _resultado_calculado(resultado):
             self.statusBar().showMessage(
-                f"Situação registrada (aba {aba})"
+                f"{metodo.nome}: solicitação={resultado.solicitacao_kN_m:.3g} kN/m, "
+                f"cunha={resultado.inclinacao_cunha_g:.3g}°"
+            )
+        else:
+            self.statusBar().showMessage(
+                f"{metodo.nome}: cálculo ainda não implementado"
             )
 
     def _abrir_resumo(self, trazer_pra_frente: bool = False):

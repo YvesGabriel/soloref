@@ -16,6 +16,7 @@ from .models import (
     FaceEstrutura,
     Solo,
     Sobrecarga,
+    Reforco,
 )
 
 EXTENSAO = ".soloref.json"
@@ -40,4 +41,5 @@ def carregar(caminho: str | Path) -> Projeto:
         solo_encosta=Solo(**data["solo_encosta"]),
         solo_fundacao=Solo(**data["solo_fundacao"]),
         sobrecarga=Sobrecarga(**data["sobrecarga"]),
+        reforco=Reforco(**data.get("reforco", {})),  # compat com arquivos antigos
     )

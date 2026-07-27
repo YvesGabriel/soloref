@@ -54,10 +54,13 @@ O projeto está dividido em **duas camadas** bem separadas:
 
 ```
 SoloRef/
-├── main.py                       ← ponto de entrada (`python main.py`)
-├── requirements.txt              ← dependências (PySide6, numpy, matplotlib)
+├── main.py                       ← ponto de entrada (`python main.py`); também configura logging
+├── validar.py                    ← runner de validação ("teste completo") — python validar.py
+├── requirements.txt              ← dependências (PySide6, numpy, matplotlib, scipy, pytest)
 ├── README.md                     ← descrição do projeto
 ├── GUIA_DESENVOLVEDOR.md         ← (este arquivo)
+├── PLANO_IMPLEMENTACAO.md        ← fórmulas, decisões de modelagem e status de cada método
+├── RELATORIO_VALIDACAO.md        ← gerado por validar.py (não editar à mão)
 │
 ├── soloref/                      ← pacote principal
 │   ├── __init__.py               ← versão do pacote
@@ -65,29 +68,33 @@ SoloRef/
 │   │
 │   ├── core/                     ← MODELOS + CÁLCULOS (sem Qt)
 │   │   ├── __init__.py           ← reexporta as classes principais
-│   │   ├── models.py             ← dataclasses (Projeto, Solo, Geometria, …)
+│   │   ├── models.py             ← dataclasses (Projeto, Solo, Geometria, Reforco, …)
 │   │   ├── persistence.py        ← salvar/carregar JSON
-│   │   └── methods/              ← um arquivo por método
+│   │   └── methods/              ← um arquivo por método, todos implementados
 │   │       ├── __init__.py
 │   │       ├── base.py           ← classe abstrata MetodoAnalise + Resultado
-│   │       ├── coulomb.py
-│   │       ├── rankine.py
-│   │       ├── dois_blocos.py
-│   │       ├── bishop.py         ← novo (placeholder)
-│   │       └── geossintetico.py  ← novo (placeholder)
+│   │       ├── coulomb.py        ← fórmula fechada + busca de cunha (trial wedge)
+│   │       ├── rankine.py        ← fórmula fechada (horizontal e talude)
+│   │       ├── dois_blocos.py    ← cunha bilinear, busca numérica (sem fórmula fechada)
+│   │       ├── bishop.py         ← fatias + iteração de FS, busca do círculo crítico
+│   │       └── geossintetico.py  ← dimensionamento de camadas (equilíbrio-limite/tieback)
 │   │
 │   └── ui/                       ← INTERFACE (PySide6)
 │       ├── __init__.py
-│       ├── main_window.py        ← janela principal, menus, toolbar, MDI
+│       ├── main_window.py        ← janela principal, menus, toolbar, MDI — chama os métodos de verdade
 │       └── dialogs/
 │           ├── __init__.py
-│           ├── entrada_dados.py    ← diálogo "Entrada de dados" (7 abas)
+│           ├── entrada_dados.py    ← diálogo "Entrada de dados" (8 abas)
 │           ├── esquema_widget.py   ← desenho do muro (vetorial, ao vivo)
 │           ├── metodo_info.py      ← diálogo "Estabilidade interna"
 │           └── quadro_resumo.py    ← tabela das últimas 8 situações
 │
 └── tests/
-    └── test_models.py            ← smoke test do core
+    ├── __init__.py
+    ├── casos_literatura.py            ← dataset de casos de validação (fonte de verdade)
+    ├── casos_referencia_original.csv  ← conferência opcional com o programa original (vazio por padrão)
+    ├── test_models.py                 ← smoke test do core
+    └── test_{rankine,coulomb,dois_blocos,bishop,geossintetico,degeneracia}.py
 ```
 
 ---
@@ -98,16 +105,17 @@ SoloRef/
 
 | Arquivo | Função | Quando mexer |
 |---|---|---|
-| `main.py` | Cria o `QApplication`, instancia a `MainWindow` e roda o `app.exec()`. É o ponto de entrada. | Quase nunca — só se quiser mudar nome da aplicação ou parâmetros globais do Qt. |
-| `requirements.txt` | Lista as dependências instaláveis via `pip`. | Quando adicionar uma nova lib (ex.: `scipy` para otimização). |
-| `README.md` | Descrição do projeto, instruções de instalação. | Quando quiser comunicar status do projeto a outros. |
+| `main.py` | Cria o `QApplication`, configura logging (`logs/soloref_app.log`), instancia a `MainWindow` e roda o `app.exec()`. É o ponto de entrada. | Quase nunca — só se quiser mudar nome da aplicação, parâmetros globais do Qt, ou o formato do log. |
+| `validar.py` | Runner de validação: roda todos os casos de `tests/casos_literatura.py` (+ `tests/casos_referencia_original.csv` se tiver linhas), compara com o esperado e gera `RELATORIO_VALIDACAO.md` + log em `logs/`. | Quando adicionar um caso novo ao dataset e quiser ver o relatório atualizado; raramente precisa mexer na lógica do runner em si. |
+| `requirements.txt` | Lista as dependências instaláveis via `pip` (PySide6, numpy, matplotlib, scipy, pytest). | Quando adicionar uma nova lib. |
+| `README.md` | Descrição do projeto, instruções de instalação e de como rodar os testes/validação. | Quando quiser comunicar status do projeto a outros. |
 
 ### 3.2 `soloref/core/` — modelos e cálculos
 
 | Arquivo | Função | Quando mexer |
 |---|---|---|
-| `models.py` | Define **todas as estruturas de dados** do projeto: `Identificacao`, `Geometria`, `FaceEstrutura`, `Solo`, `Sobrecarga` e `Projeto` (que agrega tudo). São `@dataclass` — Python já gera `__init__`, `__repr__`, comparação, etc. | Quando adicionar um novo campo de entrada (ex.: nível d'água), uma nova categoria de solo, ou um novo tipo de sobrecarga. **Atenção:** mudar aqui geralmente exige mudança correspondente em `entrada_dados.py` (UI) e `persistence.py` (carregar arquivos antigos). |
-| `persistence.py` | Salva/carrega o `Projeto` em **JSON**. Usa `dataclasses.asdict()` para serializar. Formato legível, versionável em git, melhor que binário proprietário. | Se quiser mudar o formato do arquivo (ex.: YAML), versionar o schema, ou adicionar migração de versões antigas. |
+| `models.py` | Define **todas as estruturas de dados** do projeto: `Identificacao`, `Geometria`, `FaceEstrutura`, `Solo`, `Sobrecarga`, `Reforco` (parâmetros do geossintético) e `Projeto` (que agrega tudo). São `@dataclass` — Python já gera `__init__`, `__repr__`, comparação, etc. | Quando adicionar um novo campo de entrada (ex.: nível d'água), uma nova categoria de solo, ou um novo tipo de sobrecarga. **Atenção:** mudar aqui geralmente exige mudança correspondente em `entrada_dados.py` (UI) e `persistence.py` (carregar arquivos antigos). |
+| `persistence.py` | Salva/carrega o `Projeto` em **JSON**. Usa `dataclasses.asdict()` para serializar. Formato legível, versionável em git, melhor que binário proprietário. `carregar()` usa `data.get(secao, {})` com fallback pros defaults da dataclass, para não quebrar ao abrir arquivos salvos antes de um campo/seção novo existir. | Se quiser mudar o formato do arquivo (ex.: YAML), versionar o schema, ou adicionar migração de versões antigas. **Sempre** que adicionar uma seção nova em `models.py`, adicionar aqui também (com o fallback), senão `carregar()` quebra em arquivos antigos. |
 | `__init__.py` | Reexporta as classes principais para que se possa fazer `from soloref.core import Projeto` sem precisar saber o caminho interno. | Quando criar um novo modelo importante. |
 
 ### 3.3 `soloref/core/methods/` — métodos de análise
@@ -115,14 +123,15 @@ SoloRef/
 | Arquivo | Função | Quando mexer |
 |---|---|---|
 | `base.py` | Define `MetodoAnalise` (classe abstrata com método `calcular(projeto) → Resultado`) e a dataclass `Resultado` (com `solicitacao_kN_m`, `inclinacao_cunha_g`, `fator_seguranca`, e um dict `extras` para dados específicos). | Se quiser mudar a interface comum a todos os métodos (ex.: adicionar um parâmetro de tolerância de iteração, ou um método `desenhar(painter)` para desenho específico de cada cunha). |
-| `coulomb.py` | `MetodoCoulomb`. Hoje é placeholder: retorna `Resultado()` vazio. As **hipóteses** já estão escritas (mostradas na UI). | **Prioridade 1**: implementar o cálculo real do empuxo de Coulomb (caso simples primeiro, depois caso geral com δ ≠ 0). |
-| `rankine.py` | `MetodoRankine`. Idem: placeholder com hipóteses. | **Prioridade 2**: implementar Ka = tan²(45−φ/2), Ea = ½γH²Ka − 2cH√Ka. |
-| `dois_blocos.py` | `MetodoDoisBlocos`. Placeholder. | **Prioridade 3**: implementar busca pela cunha bilinear ótima (otimizar θ1, θ2 ou posição do ponto de inflexão). |
-| `bishop.py` | `MetodoBishop` (NOVO). Placeholder. | Implementar Bishop simplificado com fatias e iteração de FS. |
-| `geossintetico.py` | `MetodoGeossintetico` (NOVO). Placeholder. | Implementar dimensionamento de número de camadas, espaçamento Sv e comprimento de ancoragem Le. |
+| `coulomb.py` | `MetodoCoulomb` — **implementado**. Ka geral fechado (θ=90−β, δ, i) + `Ea = ½γH²Ka + KaqH`. Além disso, uma busca de cunha independente (trial wedge/Culmann, via equilíbrio de forças da cunha tentativa) que serve de conferência cruzada — o Ea da busca é comparado ao da fórmula fechada nos testes. | Ajustar a convenção de sobrecarga, adicionar coesão à fórmula geral, ou revisar a faixa de validade (70°≤β≤90°). |
+| `rankine.py` | `MetodoRankine` — **implementado**. `Ka=(1-senφ)/(1+senφ)` (horizontal) ou forma de talude (i≠0, c=0); `Ea`, cunha (45+φ/2) e `z0` (trinca de tração, com coesão). | Estender para retroaterro inclinado **com** coesão (hoje só a forma sem coesão está implementada para i≠0). |
+| `dois_blocos.py` | `MetodoDoisBlocos` — **implementado**, sem fórmula fechada. Cunha bilinear tipo "two-part wedge": interface vertical entre os dois blocos, força de interação horizontal (simplificação documentada no módulo). Busca da superfície crítica por grade + `scipy.optimize`. | Ver a limitação documentada no topo do arquivo (δ próximo de φ fica ~10-15% acima de Coulomb, não os ~1-3% típicos) antes de mexer na busca. |
+| `bishop.py` | `MetodoBishop` — **implementado**. Fatias sobre um círculo restrito a passar pelo pé do talude ("toe circle" — reduz a busca a 2 parâmetros, centro (xc,yc)); FS por iteração de ponto fixo (`mα`); busca do círculo crítico por grade + refino. Reaproveita `inclinacao_face_beta_g` como ângulo do talude (não da parede) — ver ressalva no docstring. | Generalizar para círculos que não passam pelo pé, ou separar o campo de ângulo do talude do campo de ângulo da parede em `models.py`. |
+| `geossintetico.py` | `MetodoGeossintetico` — **implementado**. Equilíbrio-limite/tieback estilo FHWA GEC-011: `σv`, `σh=Ka·σv`, `Tadm` com os 3 fatores de redução, `La`/`Le`. Espaçamento uniforme dimensionado pela condição mais crítica (base do maciço); profundidade de cada camada é o **ponto médio** da zona tributária (não o topo) — é isso que faz `ΣTmax` reproduzir Rankine quase exatamente, ver docstring do módulo. | Implementar espaçamento variável por camada (método FHWA completo, hoje simplificado para uniforme), ou compor com Coulomb/Dois Blocos em vez de só Rankine. |
 | `__init__.py` | Reexporta todas as classes de método. | Quando criar um novo método, adicionar import aqui. |
 
-**Padrão para implementar um cálculo real**: ver seção 5.1 (Cookbook).
+**Padrão para implementar um cálculo real**: ver seção 5.1 (Cookbook) — o exemplo ali
+já é essencialmente o que está em `coulomb.py`/`rankine.py` de verdade hoje.
 
 ### 3.4 `soloref/ui/` — interface PySide6
 
@@ -135,23 +144,29 @@ A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
 - **MDI Area** (`QMdiArea`) — mesma metáfora do programa original, sub-janelas internas.
 - **Status bar** na base.
 - Métodos `_novo`, `_abrir`, `_salvar`, `_entrada_dados`, `_mostrar_metodo`, `_abrir_resumo`, `_sobre`.
+- `_mostrar_metodo(aba)` **já chama o método real** (`_METODOS_POR_ABA[aba]().calcular(projeto)`), dentro de `try/except` (erro vira mensagem na status bar, não crash), loga entrada+resultado em `logs/soloref_app.log`, e passa o resultado pro Quadro Resumo via `_CHAVES_RESUMO` (só Coulomb/Rankine/Dois Blocos têm linha própria hoje — Bishop e Geossintético ainda não).
 
 **Mexer aqui quando:**
 
 - Quiser adicionar/remover um item de menu ou botão de toolbar.
 - Quiser mudar como os diálogos são abertos (ex.: abrir o método sem passar pelo diálogo de hipóteses).
 - Quiser mudar comportamento de salvar/abrir.
+- Quiser dar ao Bishop/Geossintético uma linha própria no Quadro Resumo (hoje `_CHAVES_RESUMO` só mapeia solicitação+cunha; Bishop usa `fator_seguranca` e Geossintético usa `extras["n_camadas"]`, então a status bar mostra "solicitação=0" pra eles — cosmético, não um bug de cálculo).
 
 #### `dialogs/entrada_dados.py`
 
-O **diálogo das 7 abas**. Cada aba é uma classe interna (`_AbaIdentificacao`, `_AbaGeometria`, `_AbaFace`, `_AbaSolo`, `_AbaSobrecarga`) com seu próprio formulário e um método `valores()` que devolve a dataclass correspondente.
+O **diálogo das 8 abas**. Cada aba é uma classe interna (`_AbaIdentificacao`,
+`_AbaGeometria`, `_AbaFace`, `_AbaSolo`, `_AbaSobrecarga`, `_AbaReforco`) com seu
+próprio formulário e um método `valores()` que devolve a dataclass correspondente.
+`_AbaReforco` (parâmetros do geossintético — Tult, RFcr, RFid, RFd, Ci, FS) é o
+exemplo real de "adicionar uma aba nova" que o cookbook da seção 5.2 descreve.
 
 A classe principal `EntradaDadosDialog` orquestra: monta as abas, conecta o esquema ilustrativo ao `valueChanged` dos campos relevantes (atualização ao vivo) e expõe `resultado()` para devolver o `Projeto` consolidado.
 
 **Mexer aqui quando:**
 
 - Adicionar um campo novo a uma aba (ex.: nível d'água em `_AbaSolo`).
-- Adicionar uma aba nova (ex.: "Reforço" para parâmetros do geossintético): criar uma classe `_AbaReforco`, adicionar no `tabs.addTab(...)`, criar o método `valores()`.
+- Adicionar uma aba nova: seguir o padrão de `_AbaReforco` — criar a classe, adicionar no `tabs.addTab(...)`, criar o método `valores()`, e incluir no `resultado()` do diálogo.
 - Mudar validação de campos (ex.: bloquear φ > 60°): ajustar os `QDoubleSpinBox` correspondentes.
 - Mudar layout (ordem das abas, cores, posição dos botões).
 
@@ -205,9 +220,19 @@ O método `adicionar_situacao(projeto, resultados)` adiciona uma nova coluna; qu
 
 | Arquivo | Função |
 |---|---|
-| `test_models.py` | Smoke-test: cria um `Projeto` default e verifica os valores; testa o round-trip de salvar e carregar JSON. Roda sem precisar de Qt. |
+| `casos_literatura.py` | **Fonte única de verdade** dos casos de validação: dataclass `CasoLiteratura` (id, método, fonte, entradas, esperado, tolerância) + `monta_projeto()` (aplica os overrides sobre um `Projeto()` default) + `METODOS` (mapa string→classe). Usado tanto pelos `test_*.py` quanto por `validar.py`. |
+| `casos_referencia_original.csv` | Conferência **opcional** com o programa original (PLANO_IMPLEMENTACAO.md §5). Mesmo schema de `CasoLiteratura`, achatado em CSV (`entradas_json`/`esperado_json`). Vazio por padrão (só cabeçalho); `validar.py` carrega automaticamente se tiver linhas, numa seção separada do relatório que não afeta a taxa de aprovação nem o código de saída. |
+| `test_models.py` | Smoke-test do core: `Projeto` default e round-trip de salvar/carregar JSON. |
+| `test_rankine.py`, `test_coulomb.py`, `test_dois_blocos.py`, `test_bishop.py`, `test_geossintetico.py` | Um arquivo por método, lendo os casos de `casos_literatura.py` (para Rankine/Coulomb, que têm fórmula fechada) ou com oráculos próprios — limites, monotonicidade, convergência — para os métodos sem fórmula fechada (Dois Blocos, Bishop). |
+| `test_degeneracia.py` | Casos degenerados/limite de **todos** os métodos, num só lugar (ex.: Coulomb com θ=δ=i=0 tem que coincidir com Rankine). |
 
-**Mexer aqui:** sempre que implementar um método de cálculo, adicione um teste que confere o resultado contra um caso conhecido (ex.: para H=4, φ=30°, c=0, sem sobrecarga: Ea = 53,33 kN/m).
+Todos rodam **sem precisar de PySide6** — a suíte inteira testa só `core/`.
+
+**Mexer aqui:** sempre que implementar/alterar um método de cálculo, adicione o
+caso em `casos_literatura.py` (se tiver fórmula fechada ou caso-limite
+verificável) e um teste correspondente no `test_<metodo>.py`. Para métodos sem
+fórmula fechada, prefira oráculos (limites, monotonicidade, convergência) a
+comparar contra um número "estimado".
 
 ---
 
@@ -248,14 +273,20 @@ MainWindow._mostrar_metodo(0)
     └─ Usuário clica Continuar
         │
         ▼
-    [aqui entra a chamada real ao MetodoCoulomb().calcular(projeto)]
-    [resultado vai para o QuadroResumoWidget]
+    metodo = MetodoCoulomb(); resultado = metodo.calcular(self.projeto)
+    (try/except — erro vira mensagem na status bar, não crash)
+        │
+        ▼
+    logger.info(entrada + resultado) → logs/soloref_app.log
+        │
+        ▼
+    resultado vai para o QuadroResumoWidget.adicionar_situacao(...)
 ```
 
-A "[ ]" no fluxo acima é onde **falta a integração** entre UI e cálculos
-— hoje a UI já está pronta, mas o `calcular()` é placeholder. Quando
-implementar Coulomb, basta editar `MainWindow._mostrar_metodo` para
-chamar o método real.
+Essa integração já está feita para os 5 métodos (`_METODOS_POR_ABA` em
+`main_window.py`). O que falta: dar a Bishop e Geossintético uma linha
+própria no Quadro Resumo (hoje só aparecem na status bar, não na tabela —
+ver observação na seção 3.4).
 
 ---
 
@@ -404,13 +435,20 @@ Hoje tudo está hardcoded em português. Para internacionalizar:
 ## 7. Como rodar os testes
 
 ```bash
-pip install pytest
-pytest tests/ -v
+pip install -r requirements.txt   # já inclui pytest e scipy
+pytest tests/ -v                  # suíte pytest — rápida, um arquivo por método
+python validar.py                 # runner de validação — gera RELATORIO_VALIDACAO.md
 ```
 
-Os testes em `tests/test_models.py` rodam **sem precisar de PySide6**, então funcionam em CI mesmo sem ambiente gráfico.
+Toda a suíte roda **sem precisar de PySide6** (só `core/` é testado), então funciona
+em CI mesmo sem ambiente gráfico.
 
-Quando começar a implementar os métodos, adicione um arquivo `tests/test_methods.py` com um teste por método, comparando contra valores conhecidos (ex.: o exemplo numérico do relatório teórico, Ea = 53,33 kN/m).
+`validar.py` é o "teste completo do programa": percorre `tests/casos_literatura.py`,
+calcula o erro relativo de cada caso, grava um log estruturado em
+`logs/validacao_<timestamp>.log` e sai com código ≠ 0 se algo não bater dentro da
+tolerância. Também carrega `tests/casos_referencia_original.csv` se ele tiver
+linhas (conferência opcional com o programa original — não afeta o código de
+saída). No estado atual do projeto, ambos os comandos devem terminar 100% verdes.
 
 ---
 
@@ -421,14 +459,17 @@ Quando começar a implementar os métodos, adicione um arquivo `tests/test_metho
 | Cálculo de Coulomb | `core/methods/coulomb.py` |
 | Cálculo de Rankine | `core/methods/rankine.py` |
 | Cálculo de Dois Blocos | `core/methods/dois_blocos.py` |
-| Adicionar Bishop | `core/methods/bishop.py` |
+| Cálculo de Bishop | `core/methods/bishop.py` |
 | Geossintéticos | `core/methods/geossintetico.py` |
 | Campos do projeto (modelo de dados) | `core/models.py` |
 | Como salvar/abrir arquivos | `core/persistence.py` |
-| Janela principal, menus, toolbar | `ui/main_window.py` |
-| Diálogo de Entrada de Dados (7 abas) | `ui/dialogs/entrada_dados.py` |
+| Janela principal, menus, toolbar, integração com cálculo | `ui/main_window.py` |
+| Diálogo de Entrada de Dados (8 abas) | `ui/dialogs/entrada_dados.py` |
 | Desenho do muro (esquema ilustrativo) | `ui/dialogs/esquema_widget.py` |
 | Diálogo de hipóteses dos métodos | `ui/dialogs/metodo_info.py` |
 | Tabela do Quadro Resumo | `ui/dialogs/quadro_resumo.py` |
+| Dataset de casos de validação | `tests/casos_literatura.py` |
+| Conferência com o programa original | `tests/casos_referencia_original.csv` |
+| Runner de validação ("teste completo") | `validar.py` |
 | Ponto de entrada do app | `main.py` |
 | Dependências do projeto | `requirements.txt` |

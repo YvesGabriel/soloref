@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...core.models import (
-    Projeto, Identificacao, Geometria, FaceEstrutura, Solo, Sobrecarga,
+    Projeto, Identificacao, Geometria, FaceEstrutura, Solo, Sobrecarga, Reforco,
 )
 from .esquema_widget import EsquemaWidget
 
@@ -206,6 +206,43 @@ class _AbaSobrecarga(QWidget):
         )
 
 
+class _AbaReforco(QWidget):
+    def __init__(self, r: Reforco):
+        super().__init__()
+        self.tult = _spin(r.tult_kN_m, minimum=0)
+        self.rf_fluencia = _spin(r.rf_fluencia, minimum=1)
+        self.rf_dano = _spin(r.rf_dano_instalacao, minimum=1)
+        self.rf_degradacao = _spin(r.rf_degradacao, minimum=1)
+        self.ci = _spin(r.ci_interacao, minimum=0, maximum=1)
+        self.fs_alvo = _spin(r.fs_alvo, minimum=1)
+
+        form = QFormLayout(self)
+        form.addRow("Resistência à tração última, Tult (kN/m)", self.tult)
+        form.addRow("Fator de redução — fluência, RFcr", self.rf_fluencia)
+        form.addRow("Fator de redução — dano de instalação, RFid", self.rf_dano)
+        form.addRow("Fator de redução — degradação, RFd", self.rf_degradacao)
+        form.addRow("Coeficiente de interação (arrancamento), Ci", self.ci)
+        form.addRow("Fator de segurança de projeto, FS", self.fs_alvo)
+
+        obs = QLabel(
+            "Obs. Valores default são ordens de grandeza típicas — ajuste "
+            "conforme a ficha técnica do geossintético."
+        )
+        obs.setStyleSheet("color: #b00;")
+        obs.setWordWrap(True)
+        form.addRow(obs)
+
+    def valores(self) -> Reforco:
+        return Reforco(
+            tult_kN_m=self.tult.value(),
+            rf_fluencia=self.rf_fluencia.value(),
+            rf_dano_instalacao=self.rf_dano.value(),
+            rf_degradacao=self.rf_degradacao.value(),
+            ci_interacao=self.ci.value(),
+            fs_alvo=self.fs_alvo.value(),
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Diálogo principal
 # --------------------------------------------------------------------------- #
@@ -229,6 +266,7 @@ class EntradaDadosDialog(QDialog):
         self.aba_geometria = _AbaGeometria(self.projeto.geometria)
         self.aba_face = _AbaFace(self.projeto.face)
         self.aba_sobrecarga = _AbaSobrecarga(self.projeto.sobrecarga)
+        self.aba_reforco = _AbaReforco(self.projeto.reforco)
         self.aba_identif = _AbaIdentificacao(self.projeto.identificacao)
 
         tabs = QTabWidget()
@@ -238,6 +276,7 @@ class EntradaDadosDialog(QDialog):
         tabs.addTab(self.aba_geometria, "Geometria da estrutura")
         tabs.addTab(self.aba_face, "Face da estrutura")
         tabs.addTab(self.aba_sobrecarga, "Sobrecarga")
+        tabs.addTab(self.aba_reforco, "Reforço (geossintético)")
         tabs.addTab(self.aba_identif, "Identificação do projeto")
 
         # ---- esquema ilustrativo à direita ---- #
@@ -307,4 +346,5 @@ class EntradaDadosDialog(QDialog):
             solo_encosta=self.aba_encosta.valores(),
             solo_fundacao=self.aba_fundacao.valores(),
             sobrecarga=self.aba_sobrecarga.valores(),
+            reforco=self.aba_reforco.valores(),
         )

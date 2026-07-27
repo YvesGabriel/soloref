@@ -137,7 +137,7 @@ class QuadroResumoWidget(QWidget):
 
 def _fmt(v) -> str:
     if v is None:
-        return "$$$$$$$$$$"
+        return "—"
     try:
         return f"{float(v):g}"
     except (TypeError, ValueError):
