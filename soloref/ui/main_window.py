@@ -38,6 +38,7 @@ from ..core.persistence import salvar, carregar
 from .dialogs.esquema_widget import EsquemaWidget
 from .dialogs.metodo_info import MetodoInfoDialog
 from .dialogs.quadro_resumo import QuadroResumoWidget
+from .cache_resultados import CacheResultados
 from .estado_projeto import projeto_sujo
 from .panels import PainelDados, PainelResultados
 from .resumo_map import resultado_calculado, resultado_para_resumo
@@ -45,11 +46,18 @@ from .resumo_map import resultado_calculado, resultado_para_resumo
 logger = logging.getLogger(__name__)
 
 # Índice do seletor/toolbar (0..4) -> classe de método. Mesma ordem do
-# programa original (Coul · Rank · DB · Bish · Ref).
+# programa original (Coul · Rank · DB · Bish · Ref). Também é o índice
+# usado em CacheResultados (0=Coulomb, 1=Rankine, 2=Dois Blocos,
+# 3=Bishop, 4=Geossintético).
 _METODOS_POR_ABA = [
     MetodoCoulomb, MetodoRankine, MetodoDoisBlocos, MetodoBishop,
     MetodoGeossintetico,
 ]
+_IDX_RANKINE = 1
+
+# Siglas dos métodos que rodam otimização (scipy) e podem demorar o
+# bastante para justificar cursor de ocupado + mensagem na status bar.
+_METODOS_PESADOS = ("DB", "Bish")
 
 
 class MainWindow(QMainWindow):
@@ -67,6 +75,11 @@ class MainWindow(QMainWindow):
         # e _confirmar_descarte.
         self._projeto_salvo: Projeto = self.projeto
         self._metodo_atual = 1  # começa em Rankine (instantâneo)
+        # Cache de Resultado por método (índice), válido enquanto o
+        # Projeto não mudar — trocar de aba entre métodos já calculados
+        # com os mesmos dados fica instantâneo (Dois Blocos/Bishop
+        # otimizam e podem demorar). Ver cache_resultados.py.
+        self._cache = CacheResultados()
 
         self._montar_central()
         self._montar_actions()
@@ -285,7 +298,34 @@ class MainWindow(QMainWindow):
         self.projeto = self.painel_dados.resultado()
         self.esquema.atualizar(self.projeto)
         self.esquema.limpar_resultado()
+        self._cache.invalidar()
         self._atualizar_titulo()
+
+    def _calcular_com_cache(self, idx: int, metodo, projeto: Projeto):
+        """Devolve o `Resultado` de `metodo` para `projeto`, do cache se
+        possível (mesmos dados desde o último cálculo desse método —
+        instantâneo) ou calculando de novo. Para Dois Blocos/Bishop (que
+        otimizam e podem demorar), mostra "Calculando..." na status bar e
+        cursor de ocupado enquanto calcula — `processEvents()` garante que
+        os dois realmente aparecem na tela antes da chamada bloqueante.
+        Propaga qualquer exceção de `metodo.calcular` para o chamador.
+        """
+        resultado = self._cache.obter(idx, projeto)
+        if resultado is not None:
+            return resultado
+
+        pesado = metodo.sigla in _METODOS_PESADOS
+        if pesado:
+            self.statusBar().showMessage(f"Calculando {metodo.nome}…")
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            QApplication.processEvents()
+        try:
+            resultado = metodo.calcular(projeto)
+        finally:
+            if pesado:
+                QApplication.restoreOverrideCursor()
+        self._cache.guardar(idx, projeto, resultado)
+        return resultado
 
     def _calcular(self, aba: int):
         """Roda o método `aba`, atualiza esquema + painel de resultados e
@@ -297,7 +337,7 @@ class MainWindow(QMainWindow):
         metodo = _METODOS_POR_ABA[aba]()
         self.painel_dados.destacar_metodo(metodo.sigla)
         try:
-            resultado = metodo.calcular(projeto)
+            resultado = self._calcular_com_cache(aba, metodo, projeto)
         except Exception as e:  # noqa: BLE001
             logger.exception("Erro ao calcular %s", metodo.nome)
             self.statusBar().showMessage(f"Erro ao calcular {metodo.nome}: {e}")
@@ -308,10 +348,12 @@ class MainWindow(QMainWindow):
 
         referencia = None
         if metodo.sigla in ("Coul", "DB"):
-            # Rankine é fechado/barato — calcula de novo só como referência
-            # para a comparação percentual no painel de resultados.
+            # Rankine é fechado/barato — calcula de novo (ou pega do cache)
+            # só como referência para a comparação percentual no painel.
             try:
-                referencia = MetodoRankine().calcular(projeto)
+                referencia = self._calcular_com_cache(
+                    _IDX_RANKINE, MetodoRankine(), projeto
+                )
             except Exception:  # noqa: BLE001
                 logger.exception(
                     "Falha ao calcular Rankine de referência para %s", metodo.nome
@@ -366,31 +408,29 @@ class MainWindow(QMainWindow):
         projeto = self.painel_dados.resultado()
         self.projeto = projeto
 
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            resultados: dict = {}
-            calculados: list[str] = []
-            fora_de_faixa: list[str] = []
-            falhas: list[str] = []
-            for metodo_cls in _METODOS_POR_ABA:
-                metodo = metodo_cls()
-                avisos = metodo.avisos(projeto)
-                try:
-                    resultado = metodo.calcular(projeto)
-                except Exception:  # noqa: BLE001
-                    logger.exception("Comparar métodos: falha em %s", metodo.nome)
-                    falhas.append(metodo.sigla)
-                    continue
-                logger.info(
-                    "Comparar métodos — %s | entrada=%s | resultado=%s | avisos=%s",
-                    metodo.nome, asdict(projeto), asdict(resultado), avisos,
-                )
-                resultados.update(resultado_para_resumo(metodo_cls, resultado))
-                calculados.append(metodo.sigla)
-                if avisos:
-                    fora_de_faixa.append(metodo.sigla)
-        finally:
-            QApplication.restoreOverrideCursor()
+        resultados: dict = {}
+        calculados: list[str] = []
+        fora_de_faixa: list[str] = []
+        falhas: list[str] = []
+        for idx, metodo_cls in enumerate(_METODOS_POR_ABA):
+            metodo = metodo_cls()
+            avisos = metodo.avisos(projeto)
+            try:
+                # Reaproveita o cache (ex.: método já calculado ao trocar
+                # de aba); só mostra cursor de ocupado nos que faltarem.
+                resultado = self._calcular_com_cache(idx, metodo, projeto)
+            except Exception:  # noqa: BLE001
+                logger.exception("Comparar métodos: falha em %s", metodo.nome)
+                falhas.append(metodo.sigla)
+                continue
+            logger.info(
+                "Comparar métodos — %s | entrada=%s | resultado=%s | avisos=%s",
+                metodo.nome, asdict(projeto), asdict(resultado), avisos,
+            )
+            resultados.update(resultado_para_resumo(metodo_cls, resultado))
+            calculados.append(metodo.sigla)
+            if avisos:
+                fora_de_faixa.append(metodo.sigla)
 
         self._abrir_resumo()
         self.quadro.adicionar_situacao(projeto, resultados)
