@@ -38,6 +38,7 @@ LINHAS = [
     "ponto de inflexão (m)",
     "1ª inclinação da cunha (°)",
     "2ª inclinação da cunha (°)",
+    "FS, Mét. Bishop",
 ]
 
 N_SITUACOES = 8
@@ -126,7 +127,7 @@ class QuadroResumoWidget(QWidget):
             f"{s.trem_tipo_P_kN_m:g}",
             f"{s.posicao_xo_m:g}",
             f"{s.eixo_e_m:g}",
-            str(res.get("n_camadas", 10)),
+            _fmt(res.get("n_camadas")),
             _fmt(res.get("coulomb_solicit")),
             _fmt(res.get("coulomb_cunha")),
             _fmt(res.get("rankine_solicit")),
@@ -135,6 +136,7 @@ class QuadroResumoWidget(QWidget):
             _fmt(res.get("db_inflexao")),
             _fmt(res.get("db_cunha1")),
             _fmt(res.get("db_cunha2")),
+            _fmt(res.get("bishop_fs")),
         ]
         for row, val in enumerate(valores):
             it = QTableWidgetItem(val)

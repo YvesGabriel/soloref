@@ -25,8 +25,8 @@ from dataclasses import asdict
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
-    QMainWindow, QMessageBox, QFileDialog, QToolBar, QWidget, QVBoxLayout,
-    QSplitter, QGroupBox, QDockWidget,
+    QApplication, QMainWindow, QMessageBox, QFileDialog, QToolBar, QWidget,
+    QVBoxLayout, QSplitter, QGroupBox, QDockWidget,
 )
 
 from ..core.methods import (
@@ -174,6 +174,13 @@ class MainWindow(QMainWindow):
         for act in self._metodo_actions:
             self.grupo_metodos.addAction(act)
 
+        self.act_comparar = QAction("Compa&rar métodos", self)
+        self.act_comparar.setToolTip(
+            "Roda os 5 métodos para o projeto atual e registra tudo numa "
+            "única coluna do Quadro Resumo."
+        )
+        self.act_comparar.triggered.connect(self._comparar_metodos)
+
         self.act_ext = QAction("Estabilidade e&xterna", self)
         self.act_ext.triggered.connect(self._nao_impl)
 
@@ -218,6 +225,8 @@ class MainWindow(QMainWindow):
         m_dim.addAction(self.act_bishop)
         m_dim.addAction(self.act_ref)
         m_dim.addSeparator()
+        m_dim.addAction(self.act_comparar)
+        m_dim.addSeparator()
         m_dim.addAction(self.act_ext)
         m_dim.addAction(self.act_resu)
 
@@ -248,6 +257,8 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         for act in self._metodo_actions:
             tb.addAction(act)
+        tb.addSeparator()
+        tb.addAction(self.act_comparar)
         tb.addSeparator()
         tb.addAction(self.act_ext)
         tb.addAction(self.act_resu)
@@ -333,6 +344,55 @@ class MainWindow(QMainWindow):
         resultados = resultado_para_resumo(_METODOS_POR_ABA[aba], resultado)
         self._abrir_resumo()
         self.quadro.adicionar_situacao(self.projeto, resultados)
+
+    def _comparar_metodos(self):
+        """Roda os 5 métodos para o projeto atual de uma vez e registra
+        tudo numa única coluna consolidada do Quadro Resumo — comparar é o
+        propósito central do programa, e hoje isso exigia registrar cada
+        método um a um. Métodos fora da faixa de validade (`avisos()`)
+        continuam rodando — não são pulados (ex.: Bishop num muro
+        vertical roda igual), só ficam marcados como tal no log e no
+        resumo da status bar.
+        """
+        projeto = self.painel_dados.resultado()
+        self.projeto = projeto
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            resultados: dict = {}
+            calculados: list[str] = []
+            fora_de_faixa: list[str] = []
+            falhas: list[str] = []
+            for metodo_cls in _METODOS_POR_ABA:
+                metodo = metodo_cls()
+                avisos = metodo.avisos(projeto)
+                try:
+                    resultado = metodo.calcular(projeto)
+                except Exception:  # noqa: BLE001
+                    logger.exception("Comparar métodos: falha em %s", metodo.nome)
+                    falhas.append(metodo.sigla)
+                    continue
+                logger.info(
+                    "Comparar métodos — %s | entrada=%s | resultado=%s | avisos=%s",
+                    metodo.nome, asdict(projeto), asdict(resultado), avisos,
+                )
+                resultados.update(resultado_para_resumo(metodo_cls, resultado))
+                calculados.append(metodo.sigla)
+                if avisos:
+                    fora_de_faixa.append(metodo.sigla)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        self._abrir_resumo()
+        self.quadro.adicionar_situacao(projeto, resultados)
+
+        msg = (f"Comparação: {len(calculados)}/{len(_METODOS_POR_ABA)} "
+               f"métodos registrados")
+        if fora_de_faixa:
+            msg += f" ({', '.join(fora_de_faixa)} fora de faixa)"
+        if falhas:
+            msg += f" — falharam: {', '.join(falhas)}"
+        self.statusBar().showMessage(msg)
 
     @staticmethod
     def _msg_status(metodo, resultado) -> str:

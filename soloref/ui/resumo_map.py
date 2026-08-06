@@ -4,7 +4,8 @@ Isolado da UI para poder ser testado sem abrir janela nenhuma. Converte o
 `Resultado` de um método na estrutura de chaves que `QuadroResumoWidget`
 espera, preservando exatamente as chaves usadas na versão MDI original
 (coulomb_solicit, rankine_solicit, db_*) e enriquecendo o Dois Blocos com
-o ponto de inflexão e a 2ª cunha, que já vinham em `extras`.
+o ponto de inflexão e a 2ª cunha, além de Bishop (bishop_fs) e
+Geossintético (n_camadas), que já vinham em `extras`/`fator_seguranca`.
 """
 from __future__ import annotations
 
@@ -31,8 +32,8 @@ def resultado_calculado(resultado: Resultado) -> bool:
 def resultado_para_resumo(metodo_cls, resultado: Resultado) -> dict:
     """Devolve o dict de chaves do Quadro Resumo para um dado método.
 
-    Métodos sem linha própria no quadro (Bishop) devolvem {} — a coluna
-    ainda é criada (com a geometria), mas sem célula de resultado.
+    Métodos sem linha própria no quadro devolvem {} — a coluna ainda é
+    criada (com a geometria), mas sem célula de resultado.
     """
     if not resultado_calculado(resultado):
         return {}
@@ -57,5 +58,7 @@ def resultado_para_resumo(metodo_cls, resultado: Resultado) -> dict:
         }
     if metodo_cls is MetodoGeossintetico:
         return {"n_camadas": resultado.extras.get("n_camadas")}
-    # Bishop e quaisquer outros: sem linha dedicada no quadro atual.
+    if metodo_cls is MetodoBishop:
+        return {"bishop_fs": resultado.fator_seguranca}
+    # Métodos futuros sem linha dedicada no quadro caem aqui.
     return {}
