@@ -39,7 +39,7 @@ import math
 import numpy as np
 from scipy.optimize import minimize_scalar
 
-from .base import MetodoAnalise, Resultado
+from .base import MetodoAnalise, Resultado, aviso_cunha_plana
 from ..models import Projeto
 
 
@@ -179,3 +179,6 @@ class MetodoCoulomb(MetodoAnalise):
                 "delta_g": math.degrees(delta),
             },
         )
+
+    def avisos(self, projeto: Projeto) -> list[str]:
+        return aviso_cunha_plana(projeto.geometria.inclinacao_face_beta_g)

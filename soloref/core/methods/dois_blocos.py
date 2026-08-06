@@ -55,7 +55,7 @@ import math
 import numpy as np
 from scipy.optimize import minimize
 
-from .base import MetodoAnalise, Resultado
+from .base import MetodoAnalise, Resultado, aviso_cunha_plana
 from ..models import Projeto
 
 
@@ -220,3 +220,6 @@ class MetodoDoisBlocos(MetodoAnalise):
                 "xp_m": xp,
             },
         )
+
+    def avisos(self, projeto: Projeto) -> list[str]:
+        return aviso_cunha_plana(projeto.geometria.inclinacao_face_beta_g)

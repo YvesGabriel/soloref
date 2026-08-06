@@ -113,3 +113,33 @@ class MetodoGeossintetico(MetodoAnalise):
                 "camadas": camadas,
             },
         )
+
+    def avisos(self, projeto: Projeto) -> list[str]:
+        """Reaproveita as mesmas condições que `calcular` levanta como
+        `ValueError`, mas aqui só como aviso textual (sem rodar o cálculo)."""
+        g = projeto.geometria
+        s = projeto.solo_aterro
+        sob = projeto.sobrecarga
+        r = projeto.reforco
+
+        H = g.altura_H_m
+        gamma = s.peso_especifico_kN_m3
+        q = sob.uniforme_q_kN_m2
+        phi = math.radians(s.angulo_atrito_g)
+        Ka = _ka_rankine(phi)
+        Tadm = r.tult_kN_m / (r.rf_fluencia * r.rf_dano_instalacao * r.rf_degradacao)
+
+        sigma_v_base = gamma * H + q
+        if sigma_v_base <= 0:
+            return [
+                "σv na base é <= 0 — geometria/sobrecarga inválidas; não é "
+                "possível dimensionar o espaçamento."
+            ]
+        Sv_max_base = Tadm / (Ka * sigma_v_base * r.fs_alvo)
+        if Sv_max_base <= 0:
+            return [
+                "Tração admissível (Tadm) insuficiente para o empuxo na "
+                "base (γ·H + q): reduza H/q, aumente Tult ou revise os "
+                "fatores de redução."
+            ]
+        return []

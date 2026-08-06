@@ -208,3 +208,19 @@ class MetodoBishop(MetodoAnalise):
                 "n_fatias": 30,
             },
         )
+
+    def avisos(self, projeto: Projeto) -> list[str]:
+        beta_g = projeto.geometria.inclinacao_face_beta_g
+        avisos = []
+        if beta_g >= 70.0:
+            avisos.append(
+                "Bishop (cunha circular) destina-se a taludes/faces abatidas "
+                f"(β < 70°; β atual = {beta_g:g}°); para faces íngremes "
+                "prefira Coulomb/Rankine (cunha plana)."
+            )
+        if beta_g >= 89.0:
+            avisos.append(
+                "Face praticamente vertical (β ≥ 89°): o círculo de ruptura "
+                "degenera e o resultado não tem sentido físico."
+            )
+        return avisos

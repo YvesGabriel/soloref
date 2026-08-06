@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from .base import MetodoAnalise, Resultado
+from .base import MetodoAnalise, Resultado, aviso_cunha_plana
 from ..models import Projeto
 
 
@@ -66,3 +66,14 @@ class MetodoRankine(MetodoAnalise):
             inclinacao_cunha_g=cunha,
             extras={"Ka": Ka, "z0_m": z0},
         )
+
+    def avisos(self, projeto: Projeto) -> list[str]:
+        g = projeto.geometria
+        s = projeto.solo_aterro
+        avisos = aviso_cunha_plana(g.inclinacao_face_beta_g)
+        if g.inclinacao_face_beta_g < 90.0 and s.coesao_kN_m2 == 0.0:
+            avisos.append(
+                "Rankine é rigoroso apenas para parede vertical (β = 90°); "
+                f"β atual = {g.inclinacao_face_beta_g:g}°."
+            )
+        return avisos
