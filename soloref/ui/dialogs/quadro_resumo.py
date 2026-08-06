@@ -95,6 +95,13 @@ class QuadroResumoWidget(QWidget):
         self.situacoes = self.situacoes[-N_SITUACOES:]
         self._repreencher()
 
+    def limpar(self) -> None:
+        """Esvazia todas as situações e as células de resultado (menu Novo)."""
+        self.situacoes = []
+        for r in range(len(LINHAS)):
+            for c in range(1, N_SITUACOES + 1):
+                self.tabela.setItem(r, c, QTableWidgetItem(""))
+
     # ------------------------------------------------------------------ #
     def _repreencher(self):
         for col_idx, item in enumerate(self.situacoes, start=1):

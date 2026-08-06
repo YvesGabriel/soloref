@@ -4,9 +4,16 @@ Reproduz a figura que aparece à direita em todas as abas do diálogo de
 Entrada de Dados do programa original (parte reforçada vertical, talude
 de topo, encosta, sobrecargas q e P). Os parâmetros vêm do `Projeto`,
 então o desenho é vivo: muda conforme o usuário edita os campos.
+
+Além do muro, quando um método já foi calculado (`mostrar_resultado`), o
+widget desenha por cima a **superfície crítica** que aquele método
+encontrou — reta da cunha (Rankine/Coulomb), bilinear (Dois Blocos),
+círculo (Bishop) ou camadas de reforço (Geossintético) — lendo os campos
+já presentes em `Resultado`/`extras`, sem repetir nenhum cálculo.
 """
 from __future__ import annotations
 
+import logging
 import math
 
 from PySide6.QtCore import Qt, QPointF, QRectF
@@ -15,7 +22,19 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
+from ...core.methods.base import Resultado
 from ...core.models import Projeto
+
+logger = logging.getLogger(__name__)
+
+# Cor do overlay de resultado por sigla de método (distinta da cor do muro).
+_COR_OVERLAY = {
+    "Rank": QColor("#1565c0"),
+    "Coul": QColor("#1565c0"),
+    "DB": QColor("#6a1b9a"),
+    "Bish": QColor("#2e7d32"),
+    "Ref": QColor("#e65100"),
+}
 
 
 class EsquemaWidget(QWidget):
@@ -24,6 +43,8 @@ class EsquemaWidget(QWidget):
     def __init__(self, projeto: Projeto, parent=None):
         super().__init__(parent)
         self.projeto = projeto
+        self._sigla_resultado: str | None = None
+        self._resultado: Resultado | None = None
         self.setMinimumSize(280, 220)
         self.setStyleSheet("background-color: #c8c8c8;")
 
@@ -31,23 +52,37 @@ class EsquemaWidget(QWidget):
         self.projeto = projeto
         self.update()
 
+    def mostrar_resultado(self, sigla: str, resultado: Resultado) -> None:
+        """Guarda o resultado do método ativo (`sigla` = `metodo.sigla`) para
+        desenhar a superfície crítica por cima do muro."""
+        self._sigla_resultado = sigla
+        self._resultado = resultado
+        self.update()
+
+    def limpar_resultado(self) -> None:
+        """Remove o overlay de resultado — volta a mostrar só o muro."""
+        self._sigla_resultado = None
+        self._resultado = None
+        self.update()
+
     # ------------------------------------------------------------------ #
-    def paintEvent(self, event):  # noqa: N802 (Qt API)
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.fillRect(self.rect(), QColor("#c8c8c8"))
-
+    # Transformação mundo → tela, compartilhada pelo muro e pelos overlays
+    # ------------------------------------------------------------------ #
+    def _transformacao(self):
+        """Calcula `(scale, x0, y0)`: escala (px/m) e origem em tela do pé
+        do muro. Mundo em metros, origem no pé do muro, x cresce para
+        dentro do maciço e y cresce para cima — a mesma convenção usada
+        nas coordenadas de `extras` em `core/methods/bishop.py` e
+        `dois_blocos.py`. Devolve `None` se a área de desenho for pequena
+        demais para valer a pena desenhar.
+        """
         g = self.projeto.geometria
-        s = self.projeto.sobrecarga
-
-        # Caixa de desenho com margens
         m = 30
         w = self.width() - 2 * m
         h = self.height() - 2 * m
         if w < 50 or h < 50:
-            return
+            return None
 
-        # Escala adaptativa: pega a maior dimensão envolvida
         H = max(g.altura_H_m, 1.0)
         Ht = max(g.altura_topo_Ht_m, 0.0)
         B = max(g.largura_aterro_B_m, 0.5)
@@ -55,32 +90,46 @@ class EsquemaWidget(QWidget):
         total_w = B * 2.2
         scale = min(w / total_w, h / total_h)
 
-        # Origem: pé do muro
         x0 = m + w * 0.30
         y0 = m + h * 0.85
+        return scale, x0, y0
+
+    @staticmethod
+    def _w2s(x_m: float, y_m: float, scale: float, x0: float, y0: float) -> QPointF:
+        """Converte um ponto do mundo (metros) em coordenadas de tela."""
+        return QPointF(x0 + x_m * scale, y0 - y_m * scale)
+
+    # ------------------------------------------------------------------ #
+    def paintEvent(self, event):  # noqa: N802 (Qt API)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), QColor("#c8c8c8"))
+
+        transf = self._transformacao()
+        if transf is None:
+            return
+        scale, x0, y0 = transf
+
+        g = self.projeto.geometria
+        s = self.projeto.sobrecarga
 
         beta = math.radians(g.inclinacao_face_beta_g)
         beta_e = math.radians(g.inclinacao_encosta_beta_e_g)
         i_topo = math.radians(g.inclinacao_topo_i_g)
 
-        # Pontos (em coordenadas de tela: y cresce p/ baixo, então
-        # subimos invertendo o sinal de Δy)
-        # P0 = pé do muro (frente); P1 = topo da face reforçada;
-        # P2 = topo do talude (após Ht); pontos internos para encosta
-        dy_face = H * scale
-        dx_face = (H / math.tan(beta)) * scale if beta != math.pi / 2 else 0.0
-        P0 = QPointF(x0, y0)
-        P1 = QPointF(x0 + dx_face, y0 - dy_face)
+        H = g.altura_H_m
+        Ht = g.altura_topo_Ht_m
+        B = g.largura_aterro_B_m
 
-        # Topo (segue inclinação i por largura B)
-        dx_topo = B * scale
-        dy_topo = -B * math.tan(i_topo) * scale  # sobe se i > 0
-        P2 = QPointF(P1.x() + dx_topo, P1.y() + dy_topo)
+        # Pontos-chave em coordenadas de mundo (metros, origem no pé do muro)
+        x_face = (H / math.tan(beta)) if beta != math.pi / 2 else 0.0
+        x_topo = B * math.tan(i_topo)
+        x_enc = (Ht / math.tan(beta_e)) if beta_e != math.pi / 2 else 0.0
 
-        # Encosta atrás: sobe Ht com inclinação βe
-        dy_enc = Ht * scale
-        dx_enc = (Ht / math.tan(beta_e)) * scale if beta_e != math.pi / 2 else 0.0
-        P3 = QPointF(P2.x() + dx_enc, P2.y() - dy_enc)
+        P0 = self._w2s(0.0, 0.0, *transf)
+        P1 = self._w2s(x_face, H, *transf)
+        P2 = self._w2s(x_face + B, H + x_topo, *transf)
+        P3 = self._w2s(x_face + B + x_enc, H + x_topo + Ht, *transf)
 
         # Linha do solo natural (base)
         base_left = QPointF(x0 - 30, y0)
@@ -101,15 +150,16 @@ class EsquemaWidget(QWidget):
         p.setPen(QPen(QColor("#333"), 1.5))
         p.drawPolygon(muro)
 
-        # Linha tracejada interna (cunha de ruptura, ilustrativa)
-        pen_dash = QPen(QColor("#0066aa"), 1, Qt.DashLine)
-        p.setPen(pen_dash)
-        p.drawLine(P0, P2)
+        # Superfície crítica do método calculado (cunha/círculo/camadas);
+        # se não houver resultado (ou faltar algum dado), cai na linha
+        # tracejada genérica de sempre — fallback seguro, nunca quebra.
+        if not self._desenhar_overlay_resultado(p, transf, H):
+            pen_dash = QPen(QColor("#0066aa"), 1, Qt.DashLine)
+            p.setPen(pen_dash)
+            p.drawLine(P0, P2)
 
         # ---------- sobrecargas no topo ---------- #
-        if s.uniforme_q_kN_m2 > 0 or True:  # sempre desenha as setinhas (didático)
-            self._desenhar_setas_uniformes(p, P1, P2)
-        # carga linear P (uma seta destacada)
+        self._desenhar_setas_uniformes(p, P1, P2)
         self._desenhar_carga_linear(p, P1, P2, s.posicao_xo_m, scale)
 
         # ---------- cotas / ângulos ---------- #
@@ -140,6 +190,128 @@ class EsquemaWidget(QWidget):
                    Qt.AlignRight, "βe")
 
         p.end()
+
+    # ------------------------------------------------------------------ #
+    # Overlay da superfície crítica (por método)
+    # ------------------------------------------------------------------ #
+    def _desenhar_overlay_resultado(self, p: QPainter, transf, H: float) -> bool:
+        """Desenha a superfície crítica do método ativo. Devolve `True` se
+        desenhou algo (para o chamador não cair no traço genérico) ou
+        `False` se não houver resultado ainda ou faltar algum dado —
+        nunca propaga exceção (é só desenho ilustrativo).
+        """
+        sigla = self._sigla_resultado
+        resultado = self._resultado
+        if not sigla or resultado is None:
+            return False
+        try:
+            if sigla in ("Rank", "Coul"):
+                return self._overlay_cunha_reta(p, transf, H, sigla, resultado)
+            if sigla == "DB":
+                return self._overlay_cunha_bilinear(p, transf, H, resultado)
+            if sigla == "Bish":
+                return self._overlay_circulo(p, transf, resultado)
+            if sigla == "Ref":
+                return self._overlay_camadas(p, transf, H, resultado)
+        except Exception:  # noqa: BLE001 — desenho não pode derrubar a UI
+            logger.exception("Falha ao desenhar overlay de resultado (%s)", sigla)
+        return False
+
+    def _overlay_cunha_reta(self, p: QPainter, transf, H: float, sigla: str,
+                             resultado: Resultado) -> bool:
+        """Rankine/Coulomb: reta da cunha a partir do pé do muro, na
+        inclinação `inclinacao_cunha_g` (da horizontal)."""
+        ang_g = resultado.inclinacao_cunha_g
+        if not ang_g or not (0.0 < ang_g < 90.0):
+            return False
+        x_topo = H / math.tan(math.radians(ang_g))
+        p0 = self._w2s(0.0, 0.0, *transf)
+        p1 = self._w2s(x_topo, H, *transf)
+        cor = _COR_OVERLAY[sigla]
+        p.setPen(QPen(cor, 2))
+        p.drawLine(p0, p1)
+        self._rotulo(p, p1, f"cunha {ang_g:.1f}°", cor)
+        return True
+
+    def _overlay_cunha_bilinear(self, p: QPainter, transf, H: float,
+                                 resultado: Resultado) -> bool:
+        """Dois Blocos: pé → ponto de inflexão (xp_m, inflexao_m) → topo,
+        com as inclinações `cunha1_g` e `cunha2_g`."""
+        e = resultado.extras
+        cunha1_g = e.get("cunha1_g")
+        cunha2_g = e.get("cunha2_g")
+        xp = e.get("xp_m")
+        yn = e.get("inflexao_m")
+        if None in (cunha1_g, cunha2_g, xp, yn) or not (0.0 < cunha2_g < 90.0):
+            return False
+        run2 = (H - yn) / math.tan(math.radians(cunha2_g))
+        p0 = self._w2s(0.0, 0.0, *transf)
+        pn = self._w2s(xp, yn, *transf)
+        pc = self._w2s(xp + run2, H, *transf)
+        cor = _COR_OVERLAY["DB"]
+        p.setPen(QPen(cor, 2))
+        p.drawLine(p0, pn)
+        p.drawLine(pn, pc)
+        self._rotulo(p, pn, f"{cunha1_g:.0f}° / {cunha2_g:.0f}°", cor)
+        return True
+
+    def _overlay_circulo(self, p: QPainter, transf, resultado: Resultado) -> bool:
+        """Bishop: círculo crítico (centro `xc_m, yc_m`, raio `R_m`),
+        construído para passar pelo pé do talude."""
+        e = resultado.extras
+        xc, yc, R = e.get("xc_m"), e.get("yc_m"), e.get("R_m")
+        if xc is None or yc is None or not R or R <= 0:
+            return False
+        scale = transf[0]
+        centro = self._w2s(xc, yc, *transf)
+        r_px = R * scale
+        cor = _COR_OVERLAY["Bish"]
+        p.setPen(QPen(cor, 2))
+        p.setBrush(Qt.NoBrush)
+        p.drawEllipse(centro, r_px, r_px)
+        fs = resultado.fator_seguranca
+        rotulo_txt = f"FS = {fs:.3f}" if fs else "FS = —"
+        self._rotulo(p, QPointF(centro.x() - 20, centro.y() - r_px), rotulo_txt, cor)
+        return True
+
+    def _overlay_camadas(self, p: QPainter, transf, H: float,
+                          resultado: Resultado) -> bool:
+        """Geossintético: uma linha horizontal por camada, na profundidade
+        `z_m` (medida do topo), com comprimento `L_m` a partir da face."""
+        e = resultado.extras
+        camadas = e.get("camadas")
+        n_camadas = e.get("n_camadas")
+        if not camadas or not n_camadas:
+            return False
+        cor = _COR_OVERLAY["Ref"]
+        p.setPen(QPen(cor, 1.5))
+        limite = max(self.projeto.geometria.largura_aterro_B_m, 1.0) * 1.5
+        topo = None
+        for camada in camadas:
+            z = camada.get("z_m")
+            if z is None:
+                continue
+            comprimento = min(camada.get("L_m") or 0.0, limite)
+            y_m = H - z
+            p0 = self._w2s(0.0, y_m, *transf)
+            p1 = self._w2s(comprimento, y_m, *transf)
+            p.drawLine(p0, p1)
+            if topo is None or y_m > topo:
+                topo = y_m
+        rotulo_pt = self._w2s(0.0, topo if topo is not None else H, *transf)
+        self._rotulo(p, rotulo_pt, f"{int(n_camadas)} camadas", cor)
+        return True
+
+    @staticmethod
+    def _rotulo(p: QPainter, ponto: QPointF, texto: str, cor: QColor) -> None:
+        """Legenda curta perto de um ponto do overlay."""
+        p.setPen(QPen(cor, 1))
+        font = QFont()
+        font.setPointSize(8)
+        font.setBold(True)
+        p.setFont(font)
+        p.drawText(QRectF(ponto.x() + 4, ponto.y() - 14, 130, 16),
+                   Qt.AlignLeft, texto)
 
     # ------------------------------------------------------------------ #
     def _desenhar_setas_uniformes(self, p: QPainter, P1: QPointF, P2: QPointF):
