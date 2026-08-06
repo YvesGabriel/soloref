@@ -24,6 +24,7 @@ from PySide6.QtWidgets import QWidget
 
 from ...core.methods.base import Resultado
 from ...core.models import Projeto
+from ..geometria_segura import cotg_segura
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +103,30 @@ class EsquemaWidget(QWidget):
     # ------------------------------------------------------------------ #
     def paintEvent(self, event):  # noqa: N802 (Qt API)
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.fillRect(self.rect(), QColor("#c8c8c8"))
+        try:
+            p.setRenderHint(QPainter.Antialiasing)
+            p.fillRect(self.rect(), QColor("#c8c8c8"))
+            self._desenhar(p)
+        except Exception:  # noqa: BLE001 — nenhum valor de entrada pode
+            # derrubar a UI; o usuário continua livre para digitar
+            # qualquer coisa nos campos, o desenho é que se vira.
+            logger.exception("Falha ao desenhar o esquema ilustrativo")
+            self._desenhar_erro(p)
+        finally:
+            p.end()
 
+    def _desenhar_erro(self, p: QPainter) -> None:
+        """Fallback de última linha quando `_desenhar` lança algo que nem
+        `_cotg_segura` previu — mostra um aviso em vez de deixar o widget
+        num estado de pintura quebrado (ou o app inteiro travando)."""
+        p.setPen(QPen(QColor("#a00"), 1))
+        font = QFont()
+        font.setPointSize(9)
+        p.setFont(font)
+        p.drawText(self.rect(), Qt.AlignCenter,
+                   "Não foi possível desenhar o esquema para estes valores.")
+
+    def _desenhar(self, p: QPainter) -> None:
         transf = self._transformacao()
         if transf is None:
             return
@@ -121,10 +143,19 @@ class EsquemaWidget(QWidget):
         Ht = g.altura_topo_Ht_m
         B = g.largura_aterro_B_m
 
-        # Pontos-chave em coordenadas de mundo (metros, origem no pé do muro)
-        x_face = (H / math.tan(beta)) if beta != math.pi / 2 else 0.0
+        # Pontos-chave em coordenadas de mundo (metros, origem no pé do muro).
+        # x_face/x_enc dividem por tan(β)/tan(βe) — ambos os campos aceitam
+        # 0° na entrada de dados (parede/encosta "deitada", degenerada, mas
+        # o usuário pode digitar), o que faria tan()=0 e estouraria uma
+        # ZeroDivisionError aqui sem a proteção de `cotg_segura`.
+        avisos_desenho: list[str] = []
+        x_face, saturou = cotg_segura(H, beta)
+        if saturou:
+            avisos_desenho.append(f"β={g.inclinacao_face_beta_g:g}°")
         x_topo = B * math.tan(i_topo)
-        x_enc = (Ht / math.tan(beta_e)) if beta_e != math.pi / 2 else 0.0
+        x_enc, saturou = cotg_segura(Ht, beta_e)
+        if saturou:
+            avisos_desenho.append(f"βe={g.inclinacao_encosta_beta_e_g:g}°")
 
         P0 = self._w2s(0.0, 0.0, *transf)
         P1 = self._w2s(x_face, H, *transf)
@@ -189,7 +220,25 @@ class EsquemaWidget(QWidget):
         p.drawText(QRectF(P3.x() - 14, y0 - 16, 14, 14),
                    Qt.AlignRight, "βe")
 
-        p.end()
+        if avisos_desenho:
+            self._desenhar_aviso_geometria(p, avisos_desenho)
+
+    def _desenhar_aviso_geometria(self, p: QPainter, avisos: list[str]) -> None:
+        """Banner discreto quando algum ângulo teve que ser saturado para
+        não quebrar o desenho (ver `_cotg_segura`) — o valor digitado
+        continua exatamente o que o usuário pôs, só o desenho é aproximado.
+        """
+        texto = "⚠ Geometria degenerada (" + ", ".join(avisos) + ") — desenho aproximado"
+        rect = QRectF(6, 6, max(self.width() - 12, 0), 18)
+        p.fillRect(rect, QColor(255, 246, 218, 235))
+        p.setPen(QPen(QColor("#b08600"), 1))
+        p.drawRect(rect)
+        font = QFont()
+        font.setPointSize(8)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QPen(QColor("#8a6d00"), 1))
+        p.drawText(rect, Qt.AlignCenter, texto)
 
     # ------------------------------------------------------------------ #
     # Overlay da superfície crítica (por método)
