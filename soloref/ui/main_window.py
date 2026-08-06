@@ -285,12 +285,28 @@ class MainWindow(QMainWindow):
 
         self.esquema.atualizar(projeto)
         self.esquema.mostrar_resultado(metodo.sigla, resultado)
-        self.painel_resultados.mostrar(metodo, resultado)
+
+        referencia = None
+        if metodo.sigla in ("Coul", "DB"):
+            # Rankine é fechado/barato — calcula de novo só como referência
+            # para a comparação percentual no painel de resultados.
+            try:
+                referencia = MetodoRankine().calcular(projeto)
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "Falha ao calcular Rankine de referência para %s", metodo.nome
+                )
+
+        self.painel_resultados.mostrar(metodo, resultado, projeto, referencia)
         logger.info(
             "Método executado: %s | entrada=%s | resultado=%s",
             metodo.nome, asdict(projeto), asdict(resultado),
         )
-        if resultado_calculado(resultado):
+
+        avisos = metodo.avisos(projeto)
+        if avisos:
+            self.statusBar().showMessage(avisos[0])
+        elif resultado_calculado(resultado):
             self.statusBar().showMessage(self._msg_status(metodo, resultado))
         else:
             self.statusBar().showMessage(

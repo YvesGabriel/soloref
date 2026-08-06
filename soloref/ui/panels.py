@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QPlainTextEdit, QFrame,
 )
 
-from . import relevancia
+from . import interpretacao, relevancia
 from ..core.models import Projeto
 from ..core.methods.base import MetodoAnalise, Resultado
 from .dialogs.entrada_dados import (
@@ -177,30 +177,8 @@ class PainelDados(QWidget):
 # --------------------------------------------------------------------------- #
 # Painel de resultados (por método)
 # --------------------------------------------------------------------------- #
-def _cartoes(resultado: Resultado) -> list[tuple[str, str]]:
-    """Pares (rótulo, valor) a exibir, adaptados ao tipo de resultado."""
-    e = resultado.extras
-    if e.get("n_camadas") is not None:  # geossintético
-        return [
-            ("Nº de camadas", f"{int(e['n_camadas'])}"),
-            ("Espaçamento Sv", f"{e.get('Sv_m', 0.0):.3f} m"),
-            ("Tadm", f"{e.get('Tadm_kN_m', 0.0):.1f} kN/m"),
-            ("ΣTmax", f"{e.get('Tmax_total_kN_m', 0.0):.1f} kN/m"),
-        ]
-    if resultado.fator_seguranca and not resultado.solicitacao_kN_m:  # Bishop
-        return [
-            ("Fator de segurança", f"{resultado.fator_seguranca:.3f}"),
-            ("Raio crítico", f"{e.get('R_m', 0.0):.2f} m"),
-            ("Centro (x, y)", f"({e.get('xc_m', 0.0):.1f}, {e.get('yc_m', 0.0):.1f})"),
-        ]
-    # métodos de empuxo (Rankine, Coulomb, Dois Blocos)
-    cartoes = [("Empuxo Ea", f"{resultado.solicitacao_kN_m:.1f} kN/m")]
-    if "Ka" in e:
-        cartoes.append(("Ka", f"{e['Ka']:.3f}"))
-    cartoes.append(("Inclinação da cunha", f"{resultado.inclinacao_cunha_g:.1f}°"))
-    if "cunha2_g" in e:
-        cartoes.append(("2ª cunha", f"{e['cunha2_g']:.1f}°"))
-    return cartoes
+_COR_SELO_OK = "#2e7d32"
+_COR_SELO_RUIM = "#c62828"
 
 
 class PainelResultados(QWidget):
@@ -218,6 +196,17 @@ class PainelResultados(QWidget):
         self.titulo = QLabel("Resultado")
         self.titulo.setStyleSheet("font-weight: bold;")
         lay.addWidget(self.titulo)
+
+        # Banner de avisos de aplicabilidade (metodo.avisos(projeto), Tarefa 1);
+        # escondido quando o método ativo não tem nenhum aviso.
+        self.aviso_banner = QLabel()
+        self.aviso_banner.setWordWrap(True)
+        self.aviso_banner.setStyleSheet(
+            "background: #fff6da; color: #8a6d00; border: 1px solid #e0c56a;"
+            " border-radius: 4px; padding: 6px; font-size: 11px;"
+        )
+        self.aviso_banner.setVisible(False)
+        lay.addWidget(self.aviso_banner)
 
         self._grade_host = QWidget()
         self._grade = QGridLayout(self._grade_host)
@@ -246,30 +235,72 @@ class PainelResultados(QWidget):
         lay.addWidget(self.hipoteses, 1)
 
     # ------------------------------------------------------------------ #
-    def mostrar(self, metodo: MetodoAnalise, resultado: Resultado) -> None:
+    def mostrar(self, metodo: MetodoAnalise, resultado: Resultado,
+                projeto: Projeto, referencia: Resultado | None = None) -> None:
+        """Mostra o resultado de `metodo` para `projeto`. `referencia` é o
+        `Resultado` de Rankine para o mesmo projeto (métodos de empuxo,
+        comparação percentual) — `None` quando não aplicável/disponível.
+        """
         self.titulo.setText(f"Resultado — {metodo.nome}")
-        # limpar grade
+
+        avisos = metodo.avisos(projeto)
+        if avisos:
+            self.aviso_banner.setText("\n".join(f"⚠ {a}" for a in avisos))
+            self.aviso_banner.setVisible(True)
+        else:
+            self.aviso_banner.clear()
+            self.aviso_banner.setVisible(False)
+
+        # limpar grade — setParent(None) some com o cartão antigo na hora;
+        # deleteLater() sozinho só agenda a destruição e deixava fantasmas
+        # do cartão anterior visíveis por trás dos novos por um instante.
         while self._grade.count():
             item = self._grade.takeAt(0)
             w = item.widget()
             if w is not None:
+                w.setParent(None)
                 w.deleteLater()
-        # recriar cartões
-        for idx, (rotulo, valor) in enumerate(_cartoes(resultado)):
+        # recriar cartões (rótulo/valor/selo já julgados em interpretacao.py)
+        cartoes = interpretacao.cartoes_resultado(
+            metodo.sigla, resultado, projeto, referencia
+        )
+        row, col = 0, 0
+        for cartao in cartoes:
+            # "Comparação com Rankine" é uma frase, não um número curto —
+            # ocupa a linha inteira em vez de dividir com o cartão vizinho.
+            largura_total = cartao.rotulo == "Comparação com Rankine"
             card = QWidget()
             cl = QVBoxLayout(card)
             cl.setContentsMargins(8, 6, 8, 6)
-            lab = QLabel(rotulo)
+            lab = QLabel(cartao.rotulo)
             lab.setStyleSheet("color: #666; font-size: 11px;")
-            val = QLabel(valor)
+            val = QLabel(cartao.valor)
+            val.setWordWrap(True)
             val.setStyleSheet("font-size: 16px; font-weight: bold;")
             cl.addWidget(lab)
             cl.addWidget(val)
+            if cartao.selo_texto:
+                cor = _COR_SELO_OK if cartao.selo_ok else _COR_SELO_RUIM
+                selo = QLabel(cartao.selo_texto)
+                selo.setAlignment(Qt.AlignCenter)
+                selo.setStyleSheet(
+                    f"background: {cor}; color: white; font-size: 10px;"
+                    " font-weight: bold; border-radius: 8px; padding: 2px 8px;"
+                )
+                cl.addWidget(selo, 0, Qt.AlignLeft)
             card.setStyleSheet(
                 "background: palette(base); border: 1px solid palette(mid);"
                 " border-radius: 6px;"
             )
-            self._grade.addWidget(card, idx // 2, idx % 2)
+            if largura_total:
+                if col == 1:
+                    row += 1
+                    col = 0
+                self._grade.addWidget(card, row, 0, 1, 2)
+                row += 1
+            else:
+                self._grade.addWidget(card, row, col)
+                row, col = (row + 1, 0) if col == 1 else (row, 1)
 
         self.hipoteses.setPlainText(
             "\n".join(f"• {h}" for h in metodo.hipoteses)
