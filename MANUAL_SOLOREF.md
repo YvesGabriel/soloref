@@ -127,25 +127,65 @@ está tudo certo.
 
 ## 4. A interface em cinco minutos
 
-A janela principal reproduz a metáfora do programa original. No alto estão os
-**menus** (Sistema, Dimensionamento, Relatórios, Janelas, Ajuda) e uma **barra de
-ferramentas** com nove botões, na ordem: **ED** (entrada de dados), **Coul**
-(Coulomb), **Rank** (Rankine), **DB** (Dois Blocos), **Bish** (Bishop), **Ref**
-(reforço com geossintéticos), **Ext** (estabilidade externa — reservado),
-**Resu** (quadro resumo) e **Rela** (relatórios). A área central é um espaço
-"MDI" onde as sub-janelas (como o quadro resumo) se abrem. Na base, uma barra de
-status informa o que o programa está fazendo e mostra o resultado do último
-cálculo.
+A janela principal é dividida em três painéis lado a lado — **Dados** (entrada,
+à esquerda), **Esquema ilustrativo** (ao centro) e **Resultado** (à direita) —
+mais o **Quadro Resumo**, um painel acoplável (dock) que abre na base. Não há
+diálogos modais nem sub-janelas MDI: editar um dado, escolher um método e ver o
+resultado acontece tudo na mesma tela, ao vivo.
 
-O fluxo típico é sempre o mesmo: **ED** para descrever a estrutura, depois um dos
-botões de método para calcular, e o resultado se acumula no **quadro resumo**.
+No alto ficam os **menus** (Sistema, Dimensionamento, Relatórios, Janelas,
+Ajuda) e uma **navbar única** (toolbar, com os mesmos itens do menu
+Dimensionamento) com nomes completos, na ordem: **Entrada de dados**, os
+**cinco métodos** (Coulomb, Rankine, Dois Blocos, Bishop, Reforço com
+geossintéticos — funcionam como abas exclusivas: clicar troca o método ativo e
+recalcula), **Comparar métodos**, **Estabilidade externa** (reservado),
+**Quadro Resumo** e **Relatórios**. Na base, a barra de status informa o que o
+programa está fazendo e mostra o resultado do último cálculo — ou o primeiro
+aviso de aplicabilidade do método, quando houver (seção 7).
 
-## 5. Entrada de dados (as sete abas)
+O **esquema ilustrativo**, ao centro, não é um desenho genérico: depois de
+calcular um método, ele passa a desenhar por cima do muro a **superfície
+crítica** que aquele método encontrou — a reta da cunha (Rankine/Coulomb), a
+bilinear (Dois Blocos), o círculo crítico (Bishop) ou as camadas de reforço
+(Geossintéticos) — com um rótulo curto (ex. "cunha 60,0°", "FS = 1,945").
+Editar um dado sem recalcular volta ao traço genérico, para não deixar na tela
+uma cunha desatualizada.
 
-Clicar em **ED** abre o diálogo "Entrada de dados", com sete abas à esquerda e, à
-direita, um **esquema ilustrativo** que se redesenha ao vivo conforme você altera
-os campos — uma forma rápida de conferir se a geometria digitada corresponde ao
-que você tem em mente.
+O fluxo típico é: entrar os dados (painel da esquerda, sempre visível), escolher
+um método na navbar para ver o resultado no painel da direita, e **Registrar no
+quadro** quando quiser guardar aquela situação para comparar depois. Para
+comparar **todos** os métodos de uma vez — o propósito central do programa —
+use **Comparar métodos**: roda os cinco para o projeto atual e registra tudo
+numa única coluna do Quadro Resumo, sem precisar clicar método por método
+(seção 8).
+
+Trocar para um método já calculado com os mesmos dados é instantâneo: o
+programa guarda o último resultado de cada método num cache e só recalcula se
+algo mudou desde então. Dois Blocos e Bishop rodam uma otimização numérica e
+podem levar um instante na primeira vez (ou depois de editar um dado) — nesse
+caso a barra de status mostra "Calculando <método>…" e o cursor vira uma
+ampulheta enquanto processa, para não parecer que o programa travou.
+
+## 5. Entrada de dados (as oito abas)
+
+O painel **Dados**, à esquerda da janela principal, tem oito abas sempre
+visíveis — não é um diálogo separado: qualquer edição atualiza o esquema
+ilustrativo ao vivo e, se mudar algo em relação ao que está salvo, acende o
+"*" de alterações não salvas no título da janela (seção 9).
+
+**As abas mudam de cor conforme o método ativo.** Cada método usa só um
+subconjunto dos dados — Rankine, por exemplo, não olha para o atrito
+solo-muro (δ), que só entra em Coulomb e Dois Blocos. Ao trocar de método na
+navbar, as abas relevantes para ele ficam em destaque (azul, com uma dica
+"Usa: ..." ao passar o mouse) e as demais ficam atenuadas (cinza) — uma forma
+rápida de saber que campo vale a pena conferir antes de calcular.
+
+**Três abas são reservadas.** "Solo de encosta", "Solo de fundação" e "Face"
+levam o sufixo "(estab. externa)" no rótulo e mostram um aviso amarelo no
+topo: nenhum dos cinco métodos hoje implementados lê esses campos — eles
+estão reservados para a futura verificação de estabilidade externa
+(deslizamento, tombamento, capacidade de carga). Os campos continuam lá,
+editáveis e salvos no projeto, só não entram no cálculo ainda.
 
 Os parâmetros, agrupados por aba:
 
@@ -160,12 +200,16 @@ Os parâmetros, agrupados por aba:
 | Solo de aterro | γ | Peso específico do solo reforçado (kN/m³). |
 | | c | Coesão (kN/m²). |
 | | φ | Ângulo de atrito interno (°) — o parâmetro mais influente. |
-| | δ | Ângulo de atrito solo-muro (interface), usado por Coulomb. |
-| Solo de encosta | γ, c, φ | Idem, para o solo da encosta a jusante. |
-| Solo de fundação | γ, c, φ | Idem, para o solo de apoio (usado na estabilidade externa, futura). |
-| Face | blocos | Se a face usa blocos, com altura/largura/recuo. |
+| | δ | Ângulo de atrito solo-muro (interface), usado por Coulomb e Dois Blocos. |
+| Solo de encosta *(estab. externa)* | γ, c, φ | Idem, para o solo da encosta a jusante. |
+| Solo de fundação *(estab. externa)* | γ, c, φ | Idem, para o solo de apoio. |
+| Face *(estab. externa)* | blocos | Se a face usa blocos, com altura/largura/recuo. |
 | Sobrecarga | q | Sobrecarga uniforme no topo (kN/m²). |
 | | P, x₀, e | Carga linear (trem-tipo), posição e eixo. |
+| Reforço | Tult | Resistência à tração última do geossintético (kN/m). |
+| | RFcr, RFid, RFd | Fatores de redução — fluência, dano de instalação, degradação. |
+| | Ci | Coeficiente de interação (arrancamento). |
+| | FS | Fator de segurança de projeto do reforço — também usado para julgar o FS do Bishop (seção 7.4). |
 | Identificação | textos | Nome do projeto, empresa, número do dimensionamento. |
 
 Dica de aprendizado: altere φ e observe o esquema e, depois de calcular, o
@@ -215,15 +259,26 @@ Rankine para talude, com Ka função de i e φ.
 
 **Quando usar.** Paredes verticais ou quase (70° ≤ β ≤ 90°), aterro homogêneo. É
 o ponto de partida natural; para paredes com atrito de face relevante, Coulomb é
-mais realista.
+mais realista. Fora dessa faixa, ou com face não perfeitamente vertical, o
+programa avisa sozinho — ver "Avisos de aplicabilidade" abaixo.
 
-**Como rodar.** Com o exemplo carregado, clique em **Rank**. O programa mostra as
-hipóteses do método; confirme em "Continuar" e o resultado vai para o quadro
-resumo e para a barra de status.
+**Como rodar.** Com o exemplo carregado, clique no método **Rankine** na
+navbar (ou no menu Dimensionamento) — o resultado aparece na hora no painel da
+direita, e a cunha real (não mais um traço genérico) é desenhada por cima do
+muro no esquema central. O botão "Hipóteses / figura" mostra as hipóteses do
+método a qualquer momento, sem travar o fluxo. Para guardar essa situação e
+comparar com outra depois, clique em **Registrar no quadro**.
 
 **Resultado no exemplo.** Ka = 0,333; Ea = **66,67 kN/m** (53,33 do solo + 13,33
-da sobrecarga); cunha a 60°. O empuxo atua a H/3 = 1,33 m da base (parcela do
-solo).
+da sobrecarga); cunha a 60°. O painel de resultados mostra um cartão **Ponto de
+aplicação (H/3) = 1,33 m** (válido para o caso sem coesão/sobrecarga
+concentrada).
+
+**Avisos de aplicabilidade.** Como a face do exemplo é vertical (β = 90°),
+nenhum aviso aparece. Se β caísse abaixo de 90°, um banner amarelo no painel de
+resultados (e a primeira linha, replicada na barra de status) lembraria que
+Rankine só é rigoroso para parede vertical; abaixo de 70° o aviso passa a
+recomendar Bishop (cunha circular) em vez da cunha plana.
 
 ### 7.2 Método de Coulomb
 
@@ -247,14 +302,20 @@ independentes (a fórmula fechada acima e uma **busca de cunha** que varre o ân
 do plano de ruptura), e as duas se conferem mutuamente.
 
 **Quando usar.** Sempre que o atrito de face for relevante ou a face não for
-perfeitamente vertical, ainda dentro da faixa de cunha plana (70°–90°).
+perfeitamente vertical, ainda dentro da faixa de cunha plana (70°–90°) — fora
+dela, o mesmo aviso de Rankine/Dois Blocos aparece, recomendando Bishop.
 
-**Como rodar.** Clique em **Coul**, confirme as hipóteses e continue.
+**Como rodar.** Clique no método **Coulomb** na navbar. As abas de entrada que
+Coulomb usa (Geometria, Solo de aterro — incluindo δ — e Sobrecarga) ficam
+destacadas em azul no painel da esquerda enquanto ele estiver ativo.
 
 **Resultado no exemplo.** Com δ = 20°, Ka = 0,297; Ea = **59,46 kN/m**; cunha
 crítica ≈ 56°. Repare que o empuxo é **menor** que o de Rankine (66,67): o atrito
 entre solo e muro "segura" parte da massa, aliviando a estrutura — por isso
-desprezá-lo (Rankine) é conservador.
+desprezá-lo (Rankine) é conservador. O painel de resultados quantifica essa
+diferença sozinho, num cartão **"Coulomb 11% abaixo de Rankine"** (o programa
+recalcula Rankine em segundo plano — é fechado e barato — só para essa
+comparação).
 
 ### 7.3 Método dos Dois Blocos
 
@@ -274,13 +335,20 @@ posição do ponto de inflexão).
 intermediário entre Coulomb e a análise circular. Para o caso simples (parede
 vertical, δ = 0) ele reproduz Rankine/Coulomb, o que serve de aferição.
 
-**Como rodar.** Clique em **DB**, confirme e continue. Este método é o mais
-pesado computacionalmente (faz uma otimização), então pode levar um instante a
-mais.
+**Como rodar.** Clique no método **Dois Blocos** na navbar. Este é um dos dois
+métodos mais pesados computacionalmente (faz uma otimização com `scipy`), então
+a primeira vez pode levar um instante — a barra de status mostra "Calculando
+Método dos Dois Blocos…" e o cursor vira ampulheta enquanto isso. Trocar de
+método e voltar depois, sem editar nada, é instantâneo (o resultado fica em
+cache); editar qualquer campo invalida o cache e o próximo cálculo roda de
+novo.
 
 **Resultado no exemplo.** Ea = **63,74 kN/m**, com a primeira cunha a ≈30° e a
-segunda a ≈60°. O valor cai entre Coulomb (59,46) e Rankine (66,67), como esperado
-para um método intermediário.
+segunda a ≈60° — o esquema desenha as duas retas, quebrando no ponto de
+inflexão. O valor cai entre Coulomb (59,46) e Rankine (66,67), como esperado
+para um método intermediário — o cartão de comparação mostra
+**"Dois Blocos 4% abaixo de Rankine"** (a mesma referência usada no cartão de
+Coulomb, para comparar os três métodos de empuxo numa base comum).
 
 ### 7.4 Método de Bishop simplificado
 
@@ -303,15 +371,32 @@ o de menor FS — varrendo posições de centro e raio.
 
 **Quando usar.** Faces abatidas (β < 70°), taludes, verificação global de
 estabilidade. Não faz sentido para uma parede perfeitamente vertical, onde a cunha
-plana é a hipótese adequada.
+plana é a hipótese adequada — e o programa avisa: com β ≥ 70° um banner amarelo
+recomenda Coulomb/Rankine, e com β ≥ 89° avisa que a face está praticamente
+vertical e o círculo de ruptura **degenera** (resultado sem sentido físico —
+tente rodar Bishop no exemplo condutor da seção 6, com β = 90°, para ver isso
+na prática).
 
 **Como rodar.** Como Bishop pede geometria abatida, use um **exemplo
 complementar**: H = 5 m, face a β = 30°, γ = 19 kN/m³, φ = 25°, c = 10 kN/m².
-Digite esses valores em ED e clique em **Bish**.
+Digite esses valores no painel de dados e clique no método **Bishop** na
+navbar — este é o outro método que otimiza (busca do círculo crítico), então a
+barra de status mostra "Calculando..." e o cursor vira ampulheta na primeira
+vez. Ao lado da geometria, ele desenha o círculo crítico encontrado, passando
+pelo pé do talude.
 
 **Resultado no exemplo complementar.** FS = **1,95** — um talude estável, com boa
 folga sobre o mínimo usual de 1,5. Reduzir a coesão ou aumentar a inclinação faz
 o FS cair, o que você pode explorar para ganhar intuição.
+
+**Interpretando o FS: selo ADEQUADO / INSUFICIENTE.** O painel de resultados não
+só mostra o número — ele **julga**. O cartão do fator de segurança carrega um
+selo verde **"ADEQUADO"** quando FS ≥ FS alvo, ou vermelho **"INSUFICIENTE"**
+quando FS < FS alvo. O FS alvo vem do mesmo campo usado para dimensionar o
+reforço (aba **Reforço**, seção 5) — o padrão é 1,5, então o FS = 1,95 do
+exemplo aparece com o selo **ADEQUADO**. Mude o FS alvo para, digamos, 2,0 e o
+mesmo resultado passa a aparecer como **INSUFICIENTE**, sem precisar recalcular
+nada — é só um julgamento sobre o número que já estava lá.
 
 ### 7.5 Reforço com geossintéticos
 
@@ -343,29 +428,46 @@ comprimento de ancoragem por arrancamento (Le).
 alvo — ou seja, o coração do "solo reforçado". Compõe com qualquer método de cunha
 para a verificação da estabilidade.
 
-**Como rodar.** Ajuste os parâmetros do geossintético (na aba de reforço:
+**Como rodar.** Ajuste os parâmetros do geossintético (na aba **Reforço**:
 resistência Tult, fatores de redução, coeficiente de interação Ci e FS alvo) e
-clique em **Ref**.
+clique no método **Reforço (geossintético)** na navbar.
 
 **Resultado no exemplo.** Com um geossintético de Tult = 40 kN/m e fatores
 padrão (Tadm = 16,5 kN/m), FS alvo = 1,5: o programa indica **11 camadas** com
-espaçamento uniforme Sv = 0,36 m. A soma das trações exigidas, ΣTmax = 66,67 kN/m,
-**coincide com o empuxo ativo de Rankine** para o mesmo muro — o reforço, no
-conjunto, equilibra exatamente o empuxo do solo, o que confirma a consistência do
+espaçamento uniforme Sv = 0,36 m — o esquema desenha as 11 linhas horizontais
+do reforço, mais curtas perto da base (a zona ativa La encolhe com a
+profundidade). A soma das trações exigidas, ΣTmax = 66,67 kN/m, **coincide com
+o empuxo ativo de Rankine** para o mesmo muro — o reforço, no conjunto,
+equilibra exatamente o empuxo do solo, o que confirma a consistência do
 dimensionamento.
+
+**Selo OK / ALERTA.** O cartão "Nº de camadas" também carrega um selo: verde
+**"OK"** quando o dimensionamento fechou (nº de camadas e espaçamento Sv
+finitos e positivos), ou vermelho **"ALERTA"** quando não fechou — o caso
+típico é um Tult baixo demais para o empuxo do muro (γ·H + q), que o programa
+já impede de virar um número sem sentido na tela.
 
 ## 8. Quadro resumo e interpretação
 
-O botão **Resu** abre o **Quadro Resumo**, uma tabela que guarda as últimas
-situações analisadas (até oito colunas, em rolamento) com a geometria, os
-parâmetros do solo, as sobrecargas e os resultados de cada método. É a ferramenta
-para **comparar cenários** — por exemplo, o mesmo muro com φ = 28° e φ = 32°, ou
-com e sem sobrecarga — lado a lado. Cada vez que você roda um método, uma coluna é
-atualizada.
+O botão **Quadro Resumo** abre um painel acoplável (dock, na base da janela)
+com uma tabela que guarda as últimas situações analisadas (até oito colunas,
+em rolamento) com a geometria, os parâmetros do solo, as sobrecargas e os
+resultados de cada método — inclusive o **FS de Bishop** (linha "FS, Mét.
+Bishop") e o **número de camadas** do reforço, cada um na sua própria linha.
+É a ferramenta para **comparar cenários** — por exemplo, o mesmo muro com
+φ = 28° e φ = 32°, ou com e sem sobrecarga — lado a lado.
 
-> Observação de estado atual: os resultados de esforço (Rankine, Coulomb, Dois
-> Blocos) já aparecem no quadro; a exibição do FS de Bishop e do número de camadas
-> do reforço está prevista como um ajuste próximo (ver Parte III).
+Há duas formas de preencher o quadro. **Registrar no quadro**, no painel de
+resultados, guarda só o método ativo naquele momento — é o fluxo de antes,
+método a método. **Comparar métodos**, na navbar, roda os **cinco métodos de
+uma vez** para o projeto atual e registra tudo numa **única coluna**
+consolidada — desde que essa é a razão de ser do programa (comparar Rankine,
+Coulomb, Dois Blocos, Bishop e o dimensionamento do reforço lado a lado), essa
+é a forma recomendada no dia a dia. Métodos fora da faixa de validade daquela
+geometria (ex.: Bishop numa parede vertical) não são pulados — continuam
+rodando e entrando na coluna, só ficam listados como "fora de faixa" na barra
+de status ao final, para você saber que aquele número deve ser lido com
+ressalva (ver os avisos de cada método na seção 7).
 
 ## 9. Salvar e abrir projetos
 
@@ -374,6 +476,16 @@ você pode abri-lo em qualquer editor de texto e inspecionar os dados, e ele é
 fácil de versionar. **Sistema > Abrir** recarrega um projeto salvo. Como o formato
 é texto aberto (e não um binário proprietário como no programa antigo), seus dados
 ficam portáveis e auditáveis.
+
+**Alterações não salvas.** Assim que você edita qualquer campo, em qualquer aba,
+um `*` aparece no final do título da janela — um lembrete simples de que o que
+está na tela ainda não foi gravado em disco. Salvar (`Ctrl+S` ou Sistema >
+Salvar) apaga o `*`. Se você tentar **Novo**, **Abrir** outro projeto ou
+**fechar o programa** com alterações pendentes, o SoloRef pergunta antes de
+prosseguir — **Salvar**, **Descartar** ou **Cancelar** — para não perder
+trabalho por engano. Cancelar a caixa de "Salvar como…" nesse fluxo também
+conta como não ter salvo: o programa não descarta nada até você confirmar de
+algum jeito.
 
 ## 10. Validação e confiabilidade
 
@@ -429,24 +541,34 @@ SoloRef/
 │   │   ├── models.py       dataclasses (Projeto, Solo, Geometria, Reforco, …)
 │   │   ├── persistence.py  salvar/carregar JSON
 │   │   └── methods/        um arquivo por método
-│   │       ├── base.py     MetodoAnalise (abstrata) + Resultado
+│   │       ├── base.py     MetodoAnalise (abstrata) + Resultado + avisos()
 │   │       ├── rankine.py  coulomb.py  dois_blocos.py  bishop.py  geossintetico.py
 │   └── ui/
-│       ├── main_window.py  janela, menus, toolbar, integração UI↔cálculo, log
-│       └── dialogs/        entrada_dados, esquema_widget, metodo_info, quadro_resumo
+│       ├── main_window.py       janela única (3 painéis), navbar, cálculo, log
+│       ├── panels.py             PainelDados (abas) e PainelResultados (cartões)
+│       ├── relevancia.py         quais abas cada método usa (sem Qt)
+│       ├── interpretacao.py      selos/cartões de julgamento (sem Qt)
+│       ├── resumo_map.py         Resultado -> linhas do Quadro Resumo (sem Qt)
+│       ├── estado_projeto.py     "há alterações não salvas?" (sem Qt)
+│       ├── cache_resultados.py   cache de Resultado por método (sem Qt)
+│       └── dialogs/              esquema_widget, metodo_info, quadro_resumo,
+│                                  entrada_dados (abas reaproveitadas por panels.py)
 ├── tests/
 │   ├── casos_literatura.py dataset de validação (fonte única de verdade)
-│   ├── test_*.py           testes por método + modelos + degenerescência
+│   ├── test_*.py           testes por método + modelos + degenerescência +
+│   │                       módulos de ui/ sem Qt (relevancia, interpretacao,
+│   │                       resumo_map, estado_projeto, cache_resultados, validade)
 │   └── casos_referencia_original.csv   (vazio; conferência opcional c/ o programa antigo)
 └── logs/                   logs de validação e de execução do app
 ```
 
 ## 13. Bibliotecas e por que cada uma
 
-**PySide6** (Qt para Python) constrói toda a interface: janela principal com área
-MDI, diálogos, e o esquema do muro desenhado vetorialmente com `QPainter`. É o
-binding oficial do Qt, multiplataforma (Windows, Linux, macOS), o que atende ao
-objetivo de rodar em sistemas atuais.
+**PySide6** (Qt para Python) constrói toda a interface: a janela única de três
+painéis (dados, esquema, resultado), o dock do Quadro Resumo, e o esquema do
+muro — inclusive a superfície crítica de cada método — desenhado vetorialmente
+com `QPainter`. É o binding oficial do Qt, multiplataforma (Windows, Linux,
+macOS), o que atende ao objetivo de rodar em sistemas atuais.
 
 **NumPy** fornece a álgebra vetorial usada no núcleo dos métodos — resolução de
 sistemas lineares dos triângulos de forças (equilíbrio das cunhas), operações com
@@ -475,10 +597,21 @@ campos trazem a unidade embutida (por exemplo `peso_especifico_kN_m3`,
 
 Todo método herda de `MetodoAnalise` (em `methods/base.py`), que define o contrato
 mínimo: um atributo `nome`, uma `sigla`, uma tupla `hipoteses` (o texto mostrado
-na interface antes do cálculo) e o método `calcular(projeto) -> Resultado`. O
+na interface) e o método `calcular(projeto) -> Resultado`. O
 `Resultado` é uma dataclass com campos comuns (`solicitacao_kN_m`,
 `inclinacao_cunha_g`, `fator_seguranca`) e um dicionário livre `extras` para os
 dados específicos de cada método (Ka, geometria crítica, lista de camadas, etc.).
+
+Além disso, `MetodoAnalise.avisos(projeto) -> list[str]` (default: lista vazia)
+devolve avisos de aplicabilidade calculados só a partir dos dados de entrada,
+sem rodar `calcular` — é o que alimenta o banner amarelo do painel de
+resultados e a mensagem da barra de status (seção 7). Cada método sobrescreve
+`avisos` conforme a faixa de validade já descrita em `hipoteses`: Coulomb,
+Rankine e Dois Blocos avisam fora de 70°–90° de inclinação da face; Bishop
+avisa dentro dessa faixa (o oposto — é um método de cunha circular) e alerta
+separadamente quando a face está tão vertical que o círculo degenera; o
+Geossintético avisa quando a tração admissível não fecha para o empuxo do
+muro.
 
 Esse padrão é o que faz adicionar um método novo não exigir mexer em nenhum outro:
 cria-se o arquivo, herda-se de `MetodoAnalise`, implementa-se `calcular`, e
@@ -510,6 +643,17 @@ tolerância. A segunda é o **runner** `validar.py`, que lê o dataset único
 (`tests/casos_literatura.py`), roda cada caso, calcula o erro relativo, grava um
 log com timestamp e gera o `RELATORIO_VALIDACAO.md`. O runner sai com código de
 erro se algum caso falhar, o que o torna adequado para integração contínua.
+
+A mesma regra de "sem Qt, então testável sem abrir janela" vale para a lógica
+de interface que não é desenho puro: `test_relevancia.py`, `test_interpretacao.py`,
+`test_resumo_map.py`, `test_estado_projeto.py` e `test_cache_resultados.py`
+cobrem, respectivamente, o mapa de abas relevantes por método, os selos de
+julgamento (ADEQUADO/INSUFICIENTE, OK/ALERTA), o mapeamento para o Quadro
+Resumo, o rastreamento de alterações não salvas e o cache de resultados —
+`test_validade.py` cobre os `avisos()` de cada método. Só o desenho do
+esquema (`esquema_widget.py`) e a montagem dos widgets em si ficam fora do
+pytest, por dependerem de Qt; esses foram conferidos manualmente, rodando o
+app e tirando screenshot do esquema de cada método (seção 4).
 
 O gabarito é **a literatura**: fórmulas fechadas (Rankine, Coulomb), casos-limite
 auto-verificáveis (Coulomb que degenera em Rankine; talude infinito de Bishop com

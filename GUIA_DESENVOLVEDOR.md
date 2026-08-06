@@ -79,22 +79,32 @@ SoloRef/
 │   │       ├── bishop.py         ← fatias + iteração de FS, busca do círculo crítico
 │   │       └── geossintetico.py  ← dimensionamento de camadas (equilíbrio-limite/tieback)
 │   │
-│   └── ui/                       ← INTERFACE (PySide6)
+│   └── ui/                       ← INTERFACE (PySide6) — janela única de 3 painéis
 │       ├── __init__.py
-│       ├── main_window.py        ← janela principal, menus, toolbar, MDI — chama os métodos de verdade
+│       ├── main_window.py        ← janela, navbar única, cálculo (c/ cache), log
+│       ├── panels.py             ← PainelDados (8 abas) e PainelResultados (cartões)
+│       ├── relevancia.py         ← SEM Qt: quais abas cada método consome
+│       ├── interpretacao.py      ← SEM Qt: cartões + selos de julgamento
+│       ├── resumo_map.py         ← SEM Qt: Resultado -> linhas do Quadro Resumo
+│       ├── estado_projeto.py     ← SEM Qt: "há alterações não salvas?"
+│       ├── cache_resultados.py   ← SEM Qt: cache de Resultado por método
 │       └── dialogs/
 │           ├── __init__.py
-│           ├── entrada_dados.py    ← diálogo "Entrada de dados" (8 abas)
-│           ├── esquema_widget.py   ← desenho do muro (vetorial, ao vivo)
-│           ├── metodo_info.py      ← diálogo "Estabilidade interna"
-│           └── quadro_resumo.py    ← tabela das últimas 8 situações
+│           ├── entrada_dados.py    ← as classes `_Aba*` (reaproveitadas por panels.py);
+│           │                         `EntradaDadosDialog` é resíduo da versão MDI, não usado
+│           ├── esquema_widget.py   ← desenho do muro + superfície crítica do método ativo
+│           ├── metodo_info.py      ← diálogo "Hipóteses / figura", aberto por botão
+│           └── quadro_resumo.py    ← tabela das últimas 8 situações (23 linhas)
 │
 └── tests/
     ├── __init__.py
     ├── casos_literatura.py            ← dataset de casos de validação (fonte de verdade)
     ├── casos_referencia_original.csv  ← conferência opcional com o programa original (vazio por padrão)
     ├── test_models.py                 ← smoke test do core
-    └── test_{rankine,coulomb,dois_blocos,bishop,geossintetico,degeneracia}.py
+    ├── test_{rankine,coulomb,dois_blocos,bishop,geossintetico,degeneracia}.py
+    ├── test_validade.py               ← MetodoAnalise.avisos() de cada método
+    └── test_{relevancia,interpretacao,resumo_map,estado_projeto,cache_resultados}.py
+                                        ← lógica de ui/ sem Qt (mesmo padrão do core)
 ```
 
 ---
@@ -135,68 +145,189 @@ já é essencialmente o que está em `coulomb.py`/`rankine.py` de verdade hoje.
 
 ### 3.4 `soloref/ui/` — interface PySide6
 
+A UI é uma janela única de três painéis (`main_window.py` + `panels.py`), não
+mais a metáfora MDI original. Boa parte da lógica de decisão (não de desenho)
+foi tirada dos widgets e colocada em módulos **sem import de Qt** —
+`relevancia.py`, `interpretacao.py`, `resumo_map.py`, `estado_projeto.py`,
+`cache_resultados.py` — seguindo a mesma regra de `core/`: se dá pra testar
+sem abrir janela, não deveria precisar de Qt para existir. Widgets só chamam
+essas funções e desenham o resultado.
+
 #### `main_window.py`
 
 A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
 
 - **Menus**: Sistema, Dimensionamento, Relatórios, Janelas, Ajuda.
-- **Toolbar** com os botões do programa original (ED, Coul, Rank, DB, Bish, Ref, Ext, Resu, Rela).
-- **MDI Area** (`QMdiArea`) — mesma metáfora do programa original, sub-janelas internas.
+- **Navbar única** (`QToolBar`, espelhada no menu Dimensionamento), nomes
+  completos: Entrada de dados · os cinco métodos (como `QAction` checkáveis
+  num `QActionGroup` — funcionam como abas exclusivas) · Comparar métodos ·
+  Estabilidade externa · Quadro Resumo · Relatórios.
+- Três painéis no centro (`PainelDados` | `EsquemaWidget` | `PainelResultados`,
+  num `QSplitter`) e o `QuadroResumoWidget` como `QDockWidget` na base.
 - **Status bar** na base.
-- Métodos `_novo`, `_abrir`, `_salvar`, `_entrada_dados`, `_mostrar_metodo`, `_abrir_resumo`, `_sobre`.
-- `_mostrar_metodo(aba)` **já chama o método real** (`_METODOS_POR_ABA[aba]().calcular(projeto)`), dentro de `try/except` (erro vira mensagem na status bar, não crash), loga entrada+resultado em `logs/soloref_app.log`, e passa o resultado pro Quadro Resumo via `_CHAVES_RESUMO` (só Coulomb/Rankine/Dois Blocos têm linha própria hoje — Bishop e Geossintético ainda não).
+- `_calcular(aba)`: roda o método `aba` via `_calcular_com_cache` (cache por
+  método — ver `cache_resultados.py` abaixo), atualiza esquema + painel de
+  resultados, mostra o primeiro `metodo.avisos(projeto)` na status bar (ou o
+  resumo do resultado, se não houver aviso). Não mexe no Quadro Resumo.
+- `_selecionar_metodo(aba)`: troca de método na navbar — recalcula (ou usa o
+  cache) e mostra, **sem** registrar no Quadro Resumo.
+- `_mostrar_metodo(aba)`: o botão "Registrar no quadro" — recalcula/mostra **e**
+  registra uma situação.
+- `_comparar_metodos()`: roda os 5 métodos de uma vez (reaproveitando o cache
+  do que já estiver calculado) e registra tudo numa única coluna consolidada.
+  Métodos fora da faixa de validade (`avisos()`) não são pulados — continuam
+  rodando, só entram na lista "fora de faixa" da mensagem final.
+- `_atualizar_titulo()` / `_confirmar_descarte()`: alterações não salvas (usa
+  `estado_projeto.projeto_sujo`) — ver `estado_projeto.py` abaixo.
 
 **Mexer aqui quando:**
 
-- Quiser adicionar/remover um item de menu ou botão de toolbar.
-- Quiser mudar como os diálogos são abertos (ex.: abrir o método sem passar pelo diálogo de hipóteses).
-- Quiser mudar comportamento de salvar/abrir.
-- Quiser dar ao Bishop/Geossintético uma linha própria no Quadro Resumo (hoje `_CHAVES_RESUMO` só mapeia solicitação+cunha; Bishop usa `fator_seguranca` e Geossintético usa `extras["n_camadas"]`, então a status bar mostra "solicitação=0" pra eles — cosmético, não um bug de cálculo).
+- Quiser adicionar/remover um item de menu ou ação da navbar.
+- Quiser mudar o fluxo de cálculo/cache/comparação.
+- Quiser mudar comportamento de salvar/abrir/novo ou a proteção contra perda
+  de dados.
+
+#### `panels.py`
+
+`PainelDados`: as oito abas de entrada (reaproveita as classes `_Aba*` de
+`dialogs/entrada_dados.py`), sempre visíveis, emitindo `dadosAlterados` a
+**qualquer** edição — não só geometria/sobrecarga, precisa cobrir tudo para o
+rastreamento de alterações não salvas funcionar direito. Também:
+
+- Marca "Solo de encosta", "Solo de fundação" e "Face" como reservadas
+  (sufixo "(estab. externa)" + aviso no topo da aba) — nenhum método
+  implementado hoje lê esses campos (`relevancia.ABAS_RESERVADAS`).
+- `destacar_metodo(sigla)`: pinta as abas relevantes para o método ativo
+  (`relevancia.abas_relevantes`) e atenua as demais.
+
+`PainelResultados`: cartões de resultado (via `interpretacao.cartoes_resultado`,
+já com selos de julgamento), banner de avisos (`metodo.avisos(projeto)`) e os
+botões **Recalcular** (renomeado de "Calcular" — só recalcula o método ativo;
+trocar de método na navbar já recalcula sozinho, ver docstring da classe para
+a decisão completa), **Registrar no quadro** e **Hipóteses / figura**.
+
+**Mexer aqui quando:**
+
+- Adicionar um campo novo a uma aba (mexe em `dialogs/entrada_dados.py`, mas
+  pode precisar conectar o novo widget em `PainelDados._ligar_live_update`).
+- Adicionar uma aba nova: seguir o padrão de `_AbaReforco` (`entrada_dados.py`)
+  e registrar em `PainelDados._construir`/`resultado()` e em `relevancia.py`.
+- Mudar quais abas cada método destaca, ou o texto/estilo dos cartões de
+  resultado — isso é lógica e vai em `relevancia.py`/`interpretacao.py`, não
+  aqui; `panels.py` só monta os widgets a partir do que essas funções devolvem.
+
+#### `relevancia.py`, `interpretacao.py`, `resumo_map.py` (sem Qt)
+
+- `relevancia.py`: mapa sigla-do-método → abas/campos que ele usa
+  (`abas_relevantes`, `campos_relevantes`) e `ABAS_RESERVADAS`. Fonte de
+  verdade para o destaque de abas em `PainelDados` — e para saber quais abas
+  ainda não alimentam nenhum cálculo.
+- `interpretacao.py`: `Cartao` (rótulo/valor/selo) e `cartoes_resultado(sigla,
+  resultado, projeto, referencia)` — decide os selos ADEQUADO/INSUFICIENTE
+  (Bishop, FS vs. `projeto.reforco.fs_alvo`), OK/ALERTA (Geossintético,
+  dimensionamento fechou ou não), o cartão de ponto de aplicação (H/3) e a
+  comparação percentual com Rankine (Coulomb/Dois Blocos).
+- `resumo_map.py`: `resultado_para_resumo(metodo_cls, resultado)` — o
+  `Resultado` de um método vira o dict de chaves que `QuadroResumoWidget`
+  espera (`coulomb_solicit`, `bishop_fs`, `n_camadas`, etc.); preserva as
+  chaves da versão MDI original.
+
+**Mexer aqui quando:**
+
+- Um método novo precisar de uma linha no Quadro Resumo → `resumo_map.py`.
+- Mudar a faixa de abas que um método usa, ou os campos citados no tooltip →
+  `relevancia.py`.
+- Mudar a regra de "adequado"/o texto de um cartão → `interpretacao.py`.
+- Todos são testáveis direto com `pytest`, sem Qt.
+
+#### `estado_projeto.py`, `cache_resultados.py` (sem Qt)
+
+- `estado_projeto.projeto_sujo(atual, referencia) -> bool`: compara dois
+  `Projeto` por valor (dataclasses geram `__eq__` recursivo). `MainWindow`
+  guarda `_projeto_salvo` (o último salvo/carregado) e chama isso sempre que
+  precisa saber se há alterações pendentes — título com `"*"`,
+  `_confirmar_descarte` antes de Novo/Abrir/fechar.
+- `cache_resultados.CacheResultados`: um slot de `Resultado` por índice de
+  método (`obter`/`guardar`/`invalidar`), comparando o `Projeto` por valor
+  (`dataclasses.asdict`) — não por identidade, já que `PainelDados.resultado()`
+  sempre devolve uma instância nova. `MainWindow._dados_alterados` chama
+  `invalidar()` a cada edição; `_calcular_com_cache` consulta antes de rodar
+  `metodo.calcular` (Dois Blocos/Bishop otimizam e podem demorar — só em cache
+  miss é que mostram "Calculando..." + cursor de ocupado).
+
+**Mexer aqui quando:**
+
+- Mudar o que conta como "alterações não salvas" — o que muda é o que
+  `MainWindow` compara, `estado_projeto.py` continua igual.
+- Mudar a política de cache (ex.: cachear por sigla em vez de índice, ou
+  invalidar por método em vez de tudo de uma vez) → `cache_resultados.py`.
 
 #### `dialogs/entrada_dados.py`
 
-O **diálogo das 8 abas**. Cada aba é uma classe interna (`_AbaIdentificacao`,
-`_AbaGeometria`, `_AbaFace`, `_AbaSolo`, `_AbaSobrecarga`, `_AbaReforco`) com seu
-próprio formulário e um método `valores()` que devolve a dataclass correspondente.
-`_AbaReforco` (parâmetros do geossintético — Tult, RFcr, RFid, RFd, Ci, FS) é o
-exemplo real de "adicionar uma aba nova" que o cookbook da seção 5.2 descreve.
+As classes **`_Aba*`** (`_AbaIdentificacao`, `_AbaGeometria`, `_AbaFace`,
+`_AbaSolo`, `_AbaSobrecarga`, `_AbaReforco`) — cada uma com seu formulário e um
+método `valores()` que devolve a dataclass correspondente. São o que
+`panels.PainelDados` monta como as oito abas do painel de dados. `_AbaReforco`
+(Tult, RFcr, RFid, RFd, Ci, FS) é o exemplo real de "adicionar uma aba nova"
+que o cookbook da seção 5.2 descreve.
 
-A classe principal `EntradaDadosDialog` orquestra: monta as abas, conecta o esquema ilustrativo ao `valueChanged` dos campos relevantes (atualização ao vivo) e expõe `resultado()` para devolver o `Projeto` consolidado.
+A classe `EntradaDadosDialog`, no mesmo arquivo, é resíduo da versão MDI (o
+diálogo modal de Entrada de Dados) — **não é mais instanciada em lugar
+nenhum**; a UI atual usa as abas `_Aba*` diretamente em `panels.py`. Não foi
+removida porque remover código morto não fazia parte de nenhuma tarefa; se for
+mexer numa aba, edite a classe `_Aba*`, não `EntradaDadosDialog`.
 
 **Mexer aqui quando:**
 
 - Adicionar um campo novo a uma aba (ex.: nível d'água em `_AbaSolo`).
-- Adicionar uma aba nova: seguir o padrão de `_AbaReforco` — criar a classe, adicionar no `tabs.addTab(...)`, criar o método `valores()`, e incluir no `resultado()` do diálogo.
-- Mudar validação de campos (ex.: bloquear φ > 60°): ajustar os `QDoubleSpinBox` correspondentes.
-- Mudar layout (ordem das abas, cores, posição dos botões).
+- Adicionar uma aba nova: seguir o padrão de `_AbaReforco` — criar a classe,
+  registrar em `panels.PainelDados` (`_construir`, `resultado()`, e a tabela
+  `_ABAS_ORDENADAS`) e em `relevancia.py`.
+- Mudar validação de campos (ex.: bloquear φ > 60°): ajustar os
+  `QDoubleSpinBox` correspondentes.
 
 #### `dialogs/esquema_widget.py`
 
-O **desenho do muro** que aparece à direita em todas as abas. É um `QWidget` que sobrescreve `paintEvent` e usa `QPainter` para desenhar:
+O **desenho do muro**, no painel central da janela principal. É um `QWidget`
+que sobrescreve `paintEvent` e usa `QPainter` para desenhar:
 
-- A fundação (faixa marrom),
-- O corpo do muro (polígono que respeita H, β, B, βe, i, Ht),
-- A linha tracejada da cunha de ruptura (ilustrativa),
-- As setinhas da sobrecarga uniforme q,
-- A seta vermelha do trem-tipo P,
-- As cotas H, Ht, B e os ângulos β, βe.
+- A fundação (faixa marrom) e o corpo do muro (polígono que respeita H, β, B,
+  βe, i, Ht) — transformação mundo→tela (`_transformacao`/`_w2s`) com origem
+  no pé do muro, reaproveitada tanto pelo polígono quanto pelos overlays.
+- **A superfície crítica do método ativo**, por cima do muro, quando há um
+  resultado (`mostrar_resultado(sigla, resultado)` / `limpar_resultado()`):
+  reta da cunha (Rankine/Coulomb, a partir de `inclinacao_cunha_g`), bilinear
+  (Dois Blocos, `cunha1_g`/`cunha2_g`/`xp_m`/`inflexao_m`), círculo crítico
+  (Bishop, `xc_m`/`yc_m`/`R_m`) ou as camadas de reforço (Geossintético,
+  `extras["camadas"]`) — cada um com cor e rótulo próprios. Sem resultado (ou
+  faltando algum dado), cai no traço tracejado genérico de antes — nunca
+  lança exceção, é só desenho ilustrativo.
+- As setinhas da sobrecarga uniforme q, a seta vermelha do trem-tipo P, as
+  cotas H, Ht, B e os ângulos β, βe.
 
-A escala se adapta ao tamanho da janela e aos valores de H, B, Ht. Toda vez que o usuário mexe em um spinbox, `EntradaDadosDialog` chama `esquema.atualizar(projeto)` e o widget se redesenha.
+`MainWindow._calcular` chama `mostrar_resultado` depois de um cálculo
+bem-sucedido; `_dados_alterados` chama `limpar_resultado()` (dado mudou sem
+recalcular → a cunha desenhada ficaria desatualizada).
 
 **Mexer aqui quando:**
 
-- Mudar a aparência do desenho (cores, espessura de linha, fontes).
-- Adicionar elementos novos (ex.: representação visual do nível d'água, das camadas de geossintético).
-- Mudar a representação da cunha conforme o método selecionado.
+- Mudar a aparência do desenho (cores, espessura de linha, fontes) — inclusive
+  `_COR_OVERLAY` para as cores por método.
+- Adicionar um overlay novo (ex.: nível d'água): seguir o padrão dos
+  `_overlay_*` — um método que desenha em coordenadas de mundo via `_w2s` e
+  devolve `True`/`False` (desenhou ou não).
+- Mudar a representação da cunha/círculo/camadas conforme o método.
 
 #### `dialogs/metodo_info.py`
 
-O diálogo **"Estabilidade interna - Geometria e hipóteses"**, com uma aba para cada método (Coulomb, Rankine, Dois Blocos, Bishop, Geossintéticos). Cada aba mostra:
+O diálogo **"Hipóteses / figura"** (aberto pelo botão de mesmo nome no painel
+de resultados — não é mais um passo obrigatório antes de calcular), com uma
+aba para cada método (Coulomb, Rankine, Dois Blocos, Bishop, Geossintéticos).
+Cada aba mostra:
 
 - A figura da cunha do método (`_FiguraCunha`, desenhada com `QPainter`).
 - Uma descrição curta do método.
 - O texto das hipóteses (lido da própria classe do método via `metodo.hipoteses`).
-- Botões Continuar / Fechar / Apoio.
 
 **Mexer aqui quando:**
 
@@ -206,15 +337,26 @@ O diálogo **"Estabilidade interna - Geometria e hipóteses"**, com uma aba para
 
 #### `dialogs/quadro_resumo.py`
 
-A tabela do **Quadro Resumo**, com 23 linhas (situação, geometria, parâmetros do solo, sobrecargas, resultados de cada método) e até 8 colunas (últimas situações analisadas). É um `QWidget` com um `QTableWidget` dentro.
+A tabela do **Quadro Resumo**, com 23 linhas (situação, geometria, parâmetros
+do solo, sobrecargas, resultados de cada método — inclusive `"FS, Mét.
+Bishop"`) e até 8 colunas (últimas situações analisadas). É um `QWidget` com
+um `QTableWidget` dentro.
 
-O método `adicionar_situacao(projeto, resultados)` adiciona uma nova coluna; quando completar 8, a mais antiga sai (rolamento FIFO).
+O método `adicionar_situacao(projeto, resultados)` adiciona uma nova coluna
+(vem de `resumo_map.resultado_para_resumo`, um método por vez, ou já
+consolidado com os 5 métodos no caso de `MainWindow._comparar_metodos`);
+quando completar 8, a mais antiga sai (rolamento FIFO). `limpar()` esvazia
+tudo (usado no "Novo").
 
 **Mexer aqui quando:**
 
-- Adicionar/remover linhas (ex.: quando implementar Bishop, adicionar linha "FS Bishop").
+- Adicionar/remover linhas: acrescentar em `LINHAS` **e** popular a posição
+  correspondente em `_preencher_coluna` (mantendo os dois na mesma ordem) — e
+  adicionar a chave nova em `resumo_map.py`.
 - Mudar a quantidade de situações armazenadas (constante `N_SITUACOES`).
-- Formatar valores de forma diferente (função `_fmt`).
+- Formatar valores de forma diferente (função `_fmt` — usa `"—"` para `None`,
+  não um valor-placeholder tipo `10`; isso já foi um bug real aqui, não
+  repetir).
 
 ### 3.5 `tests/`
 
@@ -225,14 +367,20 @@ O método `adicionar_situacao(projeto, resultados)` adiciona uma nova coluna; qu
 | `test_models.py` | Smoke-test do core: `Projeto` default e round-trip de salvar/carregar JSON. |
 | `test_rankine.py`, `test_coulomb.py`, `test_dois_blocos.py`, `test_bishop.py`, `test_geossintetico.py` | Um arquivo por método, lendo os casos de `casos_literatura.py` (para Rankine/Coulomb, que têm fórmula fechada) ou com oráculos próprios — limites, monotonicidade, convergência — para os métodos sem fórmula fechada (Dois Blocos, Bishop). |
 | `test_degeneracia.py` | Casos degenerados/limite de **todos** os métodos, num só lugar (ex.: Coulomb com θ=δ=i=0 tem que coincidir com Rankine). |
+| `test_validade.py` | `MetodoAnalise.avisos(projeto)` de cada método — presença/ausência de aviso por faixa de β, não o texto exato. |
+| `test_relevancia.py`, `test_interpretacao.py`, `test_resumo_map.py`, `test_estado_projeto.py`, `test_cache_resultados.py` | Lógica de `ui/*.py` que não depende de Qt (destaque de abas, selos/cartões de julgamento, mapeamento pro Quadro Resumo, alterações não salvas, cache de resultados) — mesmo padrão dos testes de `core/`: `Resultado`/`Projeto` construídos à mão, sem rodar `calcular()` nem abrir janela. |
 
-Todos rodam **sem precisar de PySide6** — a suíte inteira testa só `core/`.
+Todos rodam **sem precisar de PySide6** — mesmo os de `ui/*.py` acima, que
+testam só os módulos sem Qt daquela camada (a suíte não abre nenhuma janela).
 
 **Mexer aqui:** sempre que implementar/alterar um método de cálculo, adicione o
 caso em `casos_literatura.py` (se tiver fórmula fechada ou caso-limite
 verificável) e um teste correspondente no `test_<metodo>.py`. Para métodos sem
 fórmula fechada, prefira oráculos (limites, monotonicidade, convergência) a
-comparar contra um número "estimado".
+comparar contra um número "estimado". Ao adicionar lógica nova em `ui/` que
+não seja desenho puro (Qt), coloque-a num módulo sem import de Qt e escreva um
+teste — é o padrão que `relevancia.py`/`interpretacao.py`/`resumo_map.py`/
+`estado_projeto.py`/`cache_resultados.py` seguem.
 
 ---
 
@@ -244,49 +392,55 @@ python main.py
     ▼
 QApplication, MainWindow.show()
     │
-    ▼
-Usuário clica "ED" (Entrada de Dados)
+    ├─ PainelDados montado com Projeto() default
+    └─ _calcular(1)  # Rankine, feedback imediato
+        │
+        ▼
+Usuário edita um campo (qualquer aba)
     │
     ▼
-MainWindow._entrada_dados()
-    │
-    ├─ Cria EntradaDadosDialog(projeto_atual)
-    ├─ Diálogo monta as 7 abas com os valores atuais
-    ├─ Usuário edita campos → esquema_widget redesenha ao vivo
-    └─ Usuário clica OK
-        │
-        ▼
-    EntradaDadosDialog.resultado()
-        ├─ Coleta valores de cada aba (.valores())
-        └─ Devolve Projeto consolidado
-        │
-        ▼
-    MainWindow.projeto = novo_projeto
-        │
-        ▼
-Usuário clica "Coul" (Coulomb)
+PainelDados.dadosAlterados  (sinal — TODOS os campos estão conectados)
     │
     ▼
-MainWindow._mostrar_metodo(0)
+MainWindow._dados_alterados()
+    ├─ self.projeto = painel_dados.resultado()   # Projeto novo, consolidado
+    ├─ esquema.atualizar(projeto) + limpar_resultado()  # cunha desenhada some
+    ├─ cache.invalidar()               # qualquer método pode ter sido afetado
+    └─ _atualizar_titulo()             # "*" acende se projeto ≠ _projeto_salvo
+        │
+        ▼
+Usuário clica "Coulomb" na navbar
     │
-    ├─ Mostra MetodoInfoDialog com a aba Coulomb
-    └─ Usuário clica Continuar
+    ▼
+MainWindow._selecionar_metodo(0) → _calcular(0)
+    │
+    ├─ projeto = painel_dados.resultado()
+    ├─ painel_dados.destacar_metodo("Coul")     # abas relevantes em destaque
+    ├─ _calcular_com_cache(0, metodo, projeto)
+    │      ├─ cache HIT  → devolve na hora (troca de aba instantânea)
+    │      └─ cache MISS → "Calculando..." + WaitCursor (só p/ DB/Bishop) →
+    │                      metodo.calcular(projeto) → guarda no cache
+    ├─ esquema.mostrar_resultado("Coul", resultado)   # desenha a cunha real
+    ├─ referencia = _calcular_com_cache(1, MetodoRankine(), projeto)  # p/ comparação
+    ├─ painel_resultados.mostrar(metodo, resultado, projeto, referencia)
+    │      └─ interpretacao.cartoes_resultado(...) monta cartões + selos;
+    │         banner de metodo.avisos(projeto), se houver
+    ├─ logger.info(entrada + resultado) → logs/soloref_app.log
+    └─ status bar: primeiro aviso, OU resumo do resultado
         │
         ▼
-    metodo = MetodoCoulomb(); resultado = metodo.calcular(self.projeto)
-    (try/except — erro vira mensagem na status bar, não crash)
-        │
-        ▼
-    logger.info(entrada + resultado) → logs/soloref_app.log
-        │
-        ▼
-    resultado vai para o QuadroResumoWidget.adicionar_situacao(...)
+Usuário clica "Registrar no quadro" (ou "Comparar métodos")
+    │
+    ▼
+MainWindow._mostrar_metodo(0)                    OU     _comparar_metodos()
+    ├─ resultados = resumo_map.resultado_para_resumo(...)   [um método,       [cinco métodos,
+    ├─ _abrir_resumo()                                       via cache onde já calculado]
+    └─ quadro.adicionar_situacao(projeto, resultados)   # nova coluna no Quadro Resumo
 ```
 
-Essa integração já está feita para os 5 métodos (`_METODOS_POR_ABA` em
-`main_window.py`). O que falta: dar a Bishop e Geossintético uma linha
-própria no Quadro Resumo (hoje só aparecem na status bar, não na tabela —
-ver observação na seção 3.4).
+Essa integração está feita para os 5 métodos (`_METODOS_POR_ABA` em
+`main_window.py`), inclusive Bishop (`bishop_fs`) e Geossintético
+(`n_camadas`) — ambos com linha própria no Quadro Resumo.
 
 ---
 
@@ -321,20 +475,17 @@ atrito solo-muro, sem coesão).
            )
    ```
 
-2. `soloref/ui/main_window.py` — em `_mostrar_metodo`, depois de `dlg.exec()`:
-   ```python
-   from ..core.methods import MetodoCoulomb, MetodoRankine, MetodoDoisBlocos
-   metodos = [MetodoCoulomb, MetodoRankine, MetodoDoisBlocos]
-   resultado = metodos[aba]().calcular(self.projeto)
-   self._abrir_resumo(trazer_pra_frente=True)
-   self._resumo_widget.adicionar_situacao(
-       self.projeto,
-       resultados={f"{metodos[aba].sigla.lower()}_solicit": resultado.solicitacao_kN_m,
-                   f"{metodos[aba].sigla.lower()}_cunha": resultado.inclinacao_cunha_g}
-   )
-   ```
+Como os cinco métodos já estão implementados de verdade, isso é só o padrão a
+seguir para um método novo (seção 5.6). `_METODOS_POR_ABA`, em
+`main_window.py`, já mapeia índice → classe; `MainWindow._calcular` chama
+`metodo.calcular(projeto)` (com cache — `_calcular_com_cache`) e passa o
+`Resultado` para `panels.PainelResultados.mostrar`, que usa
+`interpretacao.cartoes_resultado` para montar os cartões. Nada disso precisa
+mudar por método — só `resumo_map.resultado_para_resumo` (chave nova no
+Quadro Resumo) e, se fizer sentido, `interpretacao.py` (um cartão/selo
+específico, como o ADEQUADO/INSUFICIENTE do Bishop).
 
-3. `tests/test_methods.py` (criar):
+3. `tests/test_coulomb.py` (segue o padrão dos outros métodos — ver seção 3.5):
    ```python
    from soloref.core import Projeto
    from soloref.core.methods import MetodoCoulomb
@@ -370,21 +521,31 @@ Exemplo: adicionar **nível d'água** ao solo de aterro.
 
 5. **`quadro_resumo.py`** — se quiser exibir o NA na tabela, adicionar uma linha em `LINHAS` e popular em `_preencher_coluna`.
 
-### 5.3 ...adicionar um botão novo na toolbar
+### 5.3 ...adicionar um botão novo na navbar
 
-Em `main_window.py`:
+Em `main_window.py` (a navbar é uma `QToolBar` só, com nomes completos — não
+há mais o wrapper de sigla curta da versão MDI):
 
-1. Criar a `QAction` em `_montar_actions`.
+1. Criar a `QAction` em `_montar_actions`, com o nome completo (ex.:
+   `QAction("&Relatório em PDF", self)`).
 2. Adicionar no menu apropriado em `_montar_menus`.
-3. Adicionar no toolbar em `_montar_toolbar` com `add("Sigla", self.act_xxx)`.
+3. Adicionar na toolbar em `_montar_toolbar` com `tb.addAction(self.act_xxx)`
+   (a mesma `QAction` do menu — texto e atalho ficam automaticamente
+   sincronizados entre os dois).
 
 ### 5.4 ...mudar a aparência do esquema ilustrativo
 
-Tudo está em `dialogs/esquema_widget.py`, no método `paintEvent`. As
-cores são strings hex (`"#d4c8a8"` para o solo do muro, `"#a89878"`
-para a fundação, etc.). Para adicionar um elemento novo (ex.: linhas
-horizontais para representar camadas de geossintético), basta acrescentar
-chamadas de `p.drawLine(...)` antes do `p.end()`.
+O muro em si está em `dialogs/esquema_widget.py`, no método `paintEvent`. As
+cores são strings hex (`"#d4c8a8"` para o solo do muro, `"#a89878"` para a
+fundação, etc.). Para adicionar um elemento novo ao muro, acrescente chamadas
+de `p.drawLine(...)`/`p.drawPolygon(...)` antes do `p.end()`, usando
+`self._w2s(x_m, y_m, *transf)` para converter coordenadas de mundo (metros,
+origem no pé do muro) em coordenadas de tela.
+
+A **superfície crítica do método ativo** (cunha/círculo/camadas) é desenhada
+à parte, pelos métodos `_overlay_*` (`_desenhar_overlay_resultado` decide qual
+chamar, por `sigla`) — para mudar como um método específico é ilustrado, mexa
+no `_overlay_*` dele, não no `paintEvent` principal.
 
 ### 5.5 ...mudar o formato do arquivo salvo
 
@@ -399,12 +560,28 @@ Está tudo em `persistence.py`. Funções `salvar(projeto, caminho)` e
 
 Exemplo: implementar Spencer (mais geral que Bishop).
 
-1. Criar `soloref/core/methods/spencer.py` herdando de `MetodoAnalise`.
+1. Criar `soloref/core/methods/spencer.py` herdando de `MetodoAnalise` —
+   implemente `calcular` e, se fizer sentido, `avisos(projeto)` (faixa de
+   validade — ver seção 15 do manual/`test_validade.py`).
 2. Importar em `methods/__init__.py`.
-3. Em `dialogs/metodo_info.py`, adicionar uma nova aba no `MetodoInfoDialog`.
-4. Em `main_window.py`, criar a `QAction`, adicionar ao menu e ao toolbar.
+3. Em `dialogs/metodo_info.py`, adicionar uma nova aba no `MetodoInfoDialog`
+   (figura da cunha + hipóteses).
+4. Em `main_window.py`: criar a `QAction` (checkável, no `grupo_metodos`),
+   adicionar ao menu e à navbar, e um índice em `_METODOS_POR_ABA`.
+5. Em `ui/relevancia.py`: adicionar a sigla ao mapa `_RELEVANCIA` (quais
+   abas/campos o método usa) — sem isso, nenhuma aba se destaca quando ele
+   está ativo.
+6. Em `ui/resumo_map.py`: um `if metodo_cls is MetodoSpencer: return {...}`
+   para a linha dele no Quadro Resumo (e a linha correspondente em
+   `dialogs/quadro_resumo.py::LINHAS`).
+7. Opcional: um `_overlay_spencer` em `dialogs/esquema_widget.py` para
+   desenhar a superfície crítica dele (seção 5.4), e um caso em
+   `interpretacao.cartoes_resultado` se o resultado pedir um cartão/selo
+   específico (seção 3.4).
 
-A separação entre core e UI faz com que **adicionar um método novo nunca exija mexer em código de outro método**.
+A separação entre core e UI faz com que **o cálculo em si nunca exija mexer em
+código de outro método**; os passos 4–7 são só "plugar" o método novo nos
+módulos de UI que precisam saber que ele existe.
 
 ### 5.7 ...mudar o número de situações armazenadas no Quadro Resumo
 
@@ -461,13 +638,20 @@ saída). No estado atual do projeto, ambos os comandos devem terminar 100% verde
 | Cálculo de Dois Blocos | `core/methods/dois_blocos.py` |
 | Cálculo de Bishop | `core/methods/bishop.py` |
 | Geossintéticos | `core/methods/geossintetico.py` |
+| Avisos de aplicabilidade de um método (faixa de β, etc.) | `core/methods/base.py` (`avisos`) + o método específico |
 | Campos do projeto (modelo de dados) | `core/models.py` |
 | Como salvar/abrir arquivos | `core/persistence.py` |
-| Janela principal, menus, toolbar, integração com cálculo | `ui/main_window.py` |
-| Diálogo de Entrada de Dados (8 abas) | `ui/dialogs/entrada_dados.py` |
-| Desenho do muro (esquema ilustrativo) | `ui/dialogs/esquema_widget.py` |
-| Diálogo de hipóteses dos métodos | `ui/dialogs/metodo_info.py` |
-| Tabela do Quadro Resumo | `ui/dialogs/quadro_resumo.py` |
+| Janela principal, menus, navbar, cálculo (com cache), comparar métodos | `ui/main_window.py` |
+| Abas de entrada (painel de dados) e cartões de resultado (montagem) | `ui/panels.py` |
+| Quais abas cada método destaca | `ui/relevancia.py` |
+| Selos/cartões de julgamento (ADEQUADO, OK, comparação com Rankine, ...) | `ui/interpretacao.py` |
+| Mapeamento Resultado → linhas do Quadro Resumo | `ui/resumo_map.py` |
+| "Há alterações não salvas?" (título com `*`, confirmar descarte) | `ui/estado_projeto.py` |
+| Cache de resultado por método | `ui/cache_resultados.py` |
+| Classes `_Aba*` de entrada (campos de cada aba) | `ui/dialogs/entrada_dados.py` |
+| Desenho do muro e da superfície crítica (esquema ilustrativo) | `ui/dialogs/esquema_widget.py` |
+| Diálogo "Hipóteses / figura" dos métodos | `ui/dialogs/metodo_info.py` |
+| Tabela do Quadro Resumo (linhas, formatação) | `ui/dialogs/quadro_resumo.py` |
 | Dataset de casos de validação | `tests/casos_literatura.py` |
 | Conferência com o programa original | `tests/casos_referencia_original.csv` |
 | Runner de validação ("teste completo") | `validar.py` |
