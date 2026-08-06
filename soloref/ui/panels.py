@@ -15,17 +15,56 @@ nenhum da tela).
 from __future__ import annotations
 
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QWidget, QTabWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QPushButton, QPlainTextEdit, QFrame,
+    QWidget, QTabWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
+    QLabel, QPushButton, QPlainTextEdit, QFrame,
 )
 
+from . import relevancia
 from ..core.models import Projeto
 from ..core.methods.base import MetodoAnalise, Resultado
 from .dialogs.entrada_dados import (
     _AbaSolo, _AbaGeometria, _AbaFace, _AbaSobrecarga, _AbaReforco,
     _AbaIdentificacao,
 )
+
+# Rótulo de aba -> chave usada em `relevancia.py`, na mesma ordem em que as
+# abas são montadas em `PainelDados._construir`.
+_ABAS_ORDENADAS = (
+    ("Geometria", relevancia.ABA_GEOMETRIA),
+    ("Solo aterro", relevancia.ABA_ATERRO),
+    ("Solo encosta (estab. externa)", relevancia.ABA_ENCOSTA),
+    ("Solo fundação (estab. externa)", relevancia.ABA_FUNDACAO),
+    ("Face (estab. externa)", relevancia.ABA_FACE),
+    ("Sobrecarga", relevancia.ABA_SOBRECARGA),
+    ("Reforço", relevancia.ABA_REFORCO),
+    ("Identificação", relevancia.ABA_IDENTIFICACAO),
+)
+
+_AVISO_RESERVADA = (
+    "Estes campos ainda não entram no dimensionamento atual — reservados "
+    "para a futura verificação de estabilidade externa."
+)
+
+_COR_RELEVANTE = QColor("#0b3d91")
+_COR_ATENUADA = QColor("#9e9e9e")
+
+
+def _marcar_reservada(widget: QWidget) -> None:
+    """Insere um aviso discreto no topo de uma aba cujos campos nenhum
+    método implementado hoje consome (ver `relevancia.ABAS_RESERVADAS`)."""
+    aviso = QLabel(_AVISO_RESERVADA)
+    aviso.setWordWrap(True)
+    aviso.setStyleSheet(
+        "color: #8a6d00; background: #fff6da; border: 1px solid #e0c56a;"
+        " border-radius: 4px; padding: 4px; font-size: 11px;"
+    )
+    lay = widget.layout()
+    if isinstance(lay, QFormLayout):
+        lay.insertRow(0, aviso)
+    else:
+        lay.insertWidget(0, aviso)
 
 
 # --------------------------------------------------------------------------- #
@@ -64,19 +103,19 @@ class PainelDados(QWidget):
         self.aba_reforco = _AbaReforco(projeto.reforco)
         self.aba_identif = _AbaIdentificacao(projeto.identificacao)
 
-        for widget, rotulo in (
-            (self.aba_geometria, "Geometria"),
-            (self.aba_aterro, "Solo aterro"),
-            (self.aba_encosta, "Solo encosta"),
-            (self.aba_fundacao, "Solo fundação"),
-            (self.aba_face, "Face"),
-            (self.aba_sobrecarga, "Sobrecarga"),
-            (self.aba_reforco, "Reforço"),
-            (self.aba_identif, "Identificação"),
-        ):
+        self._abas_widgets = (
+            self.aba_geometria, self.aba_aterro, self.aba_encosta,
+            self.aba_fundacao, self.aba_face, self.aba_sobrecarga,
+            self.aba_reforco, self.aba_identif,
+        )
+        for widget, (rotulo, _chave) in zip(self._abas_widgets, _ABAS_ORDENADAS):
             self.tabs.addTab(widget, rotulo)
 
+        for widget in (self.aba_encosta, self.aba_fundacao, self.aba_face):
+            _marcar_reservada(widget)
+
         self._ligar_live_update()
+        self.destacar_metodo(None)
 
     def _ligar_live_update(self) -> None:
         """Edição de geometria/sobrecarga sinaliza `dadosAlterados`."""
@@ -92,6 +131,28 @@ class PainelDados(QWidget):
             self.aba_sobrecarga.posicao,
         ):
             spin.valueChanged.connect(self.dadosAlterados)
+
+    # ------------------------------------------------------------------ #
+    def destacar_metodo(self, sigla: str | None) -> None:
+        """Realça as abas que o método ativo (`sigla` = `metodo.sigla`)
+        consome e atenua as demais — ver `ui/relevancia.py`. `sigla=None`
+        (nenhum método ativo ainda) limpa o destaque. Abas reservadas
+        (`relevancia.ABAS_RESERVADAS`) nunca são relevantes para nenhum
+        método, então ficam sempre atenuadas.
+        """
+        relevantes = set(relevancia.abas_relevantes(sigla)) if sigla else set()
+        tab_bar = self.tabs.tabBar()
+        for idx, (_rotulo, chave) in enumerate(_ABAS_ORDENADAS):
+            if sigla is None:
+                tab_bar.setTabTextColor(idx, QColor())
+                tab_bar.setTabToolTip(idx, "")
+            elif chave in relevantes:
+                tab_bar.setTabTextColor(idx, _COR_RELEVANTE)
+                campos = relevancia.campos_relevantes(sigla, chave)
+                tab_bar.setTabToolTip(idx, f"Usa: {', '.join(campos)}" if campos else "")
+            else:
+                tab_bar.setTabTextColor(idx, _COR_ATENUADA)
+                tab_bar.setTabToolTip(idx, "")
 
     # ------------------------------------------------------------------ #
     def set_projeto(self, projeto: Projeto) -> None:

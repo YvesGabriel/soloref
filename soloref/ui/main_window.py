@@ -275,6 +275,7 @@ class MainWindow(QMainWindow):
         projeto = self.painel_dados.resultado()
         self.projeto = projeto
         metodo = _METODOS_POR_ABA[aba]()
+        self.painel_dados.destacar_metodo(metodo.sigla)
         try:
             resultado = metodo.calcular(projeto)
         except Exception as e:  # noqa: BLE001
