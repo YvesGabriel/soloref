@@ -118,8 +118,15 @@ class PainelDados(QWidget):
         self.destacar_metodo(None)
 
     def _ligar_live_update(self) -> None:
-        """Edição de geometria/sobrecarga sinaliza `dadosAlterados`."""
-        for spin in (
+        """Qualquer edição, em qualquer aba, sinaliza `dadosAlterados`.
+
+        O sinal serve dois propósitos: redesenhar o esquema ao vivo
+        (só reage de fato a geometria/sobrecarga, que afetam o desenho) e
+        marcar o projeto como "alterações não salvas" em `MainWindow`
+        (esse precisa saber de QUALQUER campo — φ, Tult, identificação,
+        etc. — não só dos que mudam o desenho). Por isso conecta tudo.
+        """
+        spins = [
             self.aba_geometria.altura_H,
             self.aba_geometria.inclinacao_beta,
             self.aba_geometria.largura_B,
@@ -129,8 +136,27 @@ class PainelDados(QWidget):
             self.aba_sobrecarga.uniforme,
             self.aba_sobrecarga.trem,
             self.aba_sobrecarga.posicao,
-        ):
+            self.aba_sobrecarga.eixo,
+            self.aba_reforco.tult,
+            self.aba_reforco.rf_fluencia,
+            self.aba_reforco.rf_dano,
+            self.aba_reforco.rf_degradacao,
+            self.aba_reforco.ci,
+            self.aba_reforco.fs_alvo,
+            self.aba_face.altura,
+            self.aba_face.largura,
+            self.aba_face.recuo,
+        ]
+        for aba_solo in (self.aba_aterro, self.aba_encosta, self.aba_fundacao):
+            spins.extend([aba_solo.peso, aba_solo.coesao, aba_solo.atrito])
+            if aba_solo.atrito_blocos is not None:
+                spins.append(aba_solo.atrito_blocos)
+        for spin in spins:
             spin.valueChanged.connect(self.dadosAlterados)
+
+        self.aba_face.considera.toggled.connect(self.dadosAlterados)
+        self.aba_identif.identificacao.textChanged.connect(self.dadosAlterados)
+        self.aba_identif.empresa.textChanged.connect(self.dadosAlterados)
 
     # ------------------------------------------------------------------ #
     def destacar_metodo(self, sigla: str | None) -> None:
@@ -182,7 +208,21 @@ _COR_SELO_RUIM = "#c62828"
 
 
 class PainelResultados(QWidget):
-    """Mostra o resultado do método ativo + hipóteses; botões de ação."""
+    """Mostra o resultado do método ativo + hipóteses; botões de ação.
+
+    Escolha de design — redundância Calcular × Registrar: trocar de
+    método na navbar já recalcula sozinho (`MainWindow._selecionar_metodo`),
+    o que em algum momento tornou o botão "Calcular" parecido com um
+    "calcular pela primeira vez" redundante. Mas ele não é: editar um
+    campo (φ, γ, Tult, ...) SEM trocar de método não recalcula nada —
+    `MainWindow._dados_alterados` só redesenha o esquema genérico
+    (recalcular a cada tecla seria caro para Dois Blocos/Bishop, que
+    otimizam). Optamos pela opção (b): manter o botão, com o papel restrito
+    a isso — "atualize o método ativo com os dados que acabei de editar" —
+    e por isso ele foi renomeado para "Recalcular". O sinal
+    `calcularSolicitado` (e sua conexão em `MainWindow`) não mudou, só o
+    rótulo/tooltip do botão.
+    """
 
     calcularSolicitado = Signal()
     registrarSolicitado = Signal()
@@ -214,7 +254,12 @@ class PainelResultados(QWidget):
         lay.addWidget(self._grade_host)
 
         btns = QHBoxLayout()
-        self.btn_calcular = QPushButton("Calcular")
+        self.btn_calcular = QPushButton("Recalcular")
+        self.btn_calcular.setToolTip(
+            "Atualiza o resultado do método ativo com os dados atuais — "
+            "útil depois de editar um campo sem trocar de método (trocar "
+            "de método já recalcula sozinho)."
+        )
         self.btn_registrar = QPushButton("Registrar no quadro")
         self.btn_hip = QPushButton("Hipóteses / figura")
         self.btn_calcular.clicked.connect(self.calcularSolicitado)

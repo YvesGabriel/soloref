@@ -38,6 +38,7 @@ from ..core.persistence import salvar, carregar
 from .dialogs.esquema_widget import EsquemaWidget
 from .dialogs.metodo_info import MetodoInfoDialog
 from .dialogs.quadro_resumo import QuadroResumoWidget
+from .estado_projeto import projeto_sujo
 from .panels import PainelDados, PainelResultados
 from .resumo_map import resultado_calculado, resultado_para_resumo
 
@@ -52,21 +53,26 @@ _METODOS_POR_ABA = [
 
 
 class MainWindow(QMainWindow):
+    _TITULO_BASE = "SoloRef - Dimensionamento de Estruturas de Solo Reforçado"
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(
-            "SoloRef - Dimensionamento de Estruturas de Solo Reforçado"
-        )
         self.resize(1440, 820)
 
         self.projeto = Projeto()
         self.caminho_arquivo: str | None = None
+        # Referência p/ "alterações não salvas": o último Projeto salvo ou
+        # carregado. Comparado contra painel_dados.resultado() a qualquer
+        # momento via estado_projeto.projeto_sujo — ver _atualizar_titulo
+        # e _confirmar_descarte.
+        self._projeto_salvo: Projeto = self.projeto
         self._metodo_atual = 1  # começa em Rankine (instantâneo)
 
         self._montar_central()
         self._montar_actions()
         self._montar_menus()
         self._montar_toolbar()
+        self._atualizar_titulo()
         self.statusBar().showMessage("Situação ainda indeterminada")
 
         # cálculo inicial (Rankine) para dar feedback imediato
@@ -272,11 +278,14 @@ class MainWindow(QMainWindow):
 
         Como os dados mudaram sem recalcular, a superfície crítica
         desenhada (se houver) ficaria desatualizada — some, volta a
-        aparecer só o muro, até o próximo cálculo.
+        aparecer só o muro, até o próximo cálculo. Qualquer edição (não só
+        geometria/sobrecarga — ver `PainelDados._ligar_live_update`)
+        também pode ligar o "*" de alterações não salvas no título.
         """
         self.projeto = self.painel_dados.resultado()
         self.esquema.atualizar(self.projeto)
         self.esquema.limpar_resultado()
+        self._atualizar_titulo()
 
     def _calcular(self, aba: int):
         """Roda o método `aba`, atualiza esquema + painel de resultados e
@@ -406,17 +415,60 @@ class MainWindow(QMainWindow):
                 f"cunha={resultado.inclinacao_cunha_g:.3g}°")
 
     # ================================================================== #
+    # Alterações não salvas
+    # ================================================================== #
+    def _atualizar_titulo(self) -> None:
+        """Recalcula se há alterações não salvas e reflete no título
+        (`" *"` no final quando `projeto_sujo`)."""
+        sujo = projeto_sujo(self.painel_dados.resultado(), self._projeto_salvo)
+        self.setWindowTitle(self._TITULO_BASE + (" *" if sujo else ""))
+
+    def _confirmar_descarte(self, acao: str) -> bool:
+        """Se houver alterações não salvas, pergunta Salvar/Descartar/
+        Cancelar antes de `acao` (ex.: "criar um novo projeto"). Devolve
+        `True` se pode prosseguir (nada sujo, usuário descartou, ou salvou
+        com sucesso) e `False` se deve abortar (Cancelar, ou o Salvar não
+        se completou — ex.: usuário fechou o file dialog sem escolher).
+        """
+        if not projeto_sujo(self.painel_dados.resultado(), self._projeto_salvo):
+            return True
+        resp = QMessageBox.question(
+            self, "Alterações não salvas",
+            f"Há alterações não salvas. Deseja salvar antes de {acao}?",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            QMessageBox.Save,
+        )
+        if resp == QMessageBox.Cancel:
+            return False
+        if resp == QMessageBox.Discard:
+            return True
+        self._salvar()
+        return not projeto_sujo(self.painel_dados.resultado(), self._projeto_salvo)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        if self._confirmar_descarte("fechar o programa"):
+            event.accept()
+        else:
+            event.ignore()
+
+    # ================================================================== #
     # Ações
     # ================================================================== #
     def _novo(self):
+        if not self._confirmar_descarte("criar um novo projeto"):
+            return
         self.projeto = Projeto()
         self.caminho_arquivo = None
         self.painel_dados.set_projeto(self.projeto)
         self.esquema.atualizar(self.projeto)
         self.quadro.limpar()
+        self._projeto_salvo = self.projeto
+        self._atualizar_titulo()
         self.statusBar().showMessage("Novo projeto")
 
     def _abrir(self):
+        if not self._confirmar_descarte("abrir outro projeto"):
+            return
         caminho, _ = QFileDialog.getOpenFileName(
             self, "Abrir projeto", "", "Projeto SoloRef (*.json);;Todos (*)"
         )
@@ -426,6 +478,8 @@ class MainWindow(QMainWindow):
                 self.caminho_arquivo = caminho
                 self.painel_dados.set_projeto(self.projeto)
                 self.esquema.atualizar(self.projeto)
+                self._projeto_salvo = self.projeto
+                self._atualizar_titulo()
                 self.statusBar().showMessage(f"Carregado: {caminho}")
             except Exception as e:  # noqa: BLE001
                 QMessageBox.critical(self, "Erro ao abrir", str(e))
@@ -443,6 +497,8 @@ class MainWindow(QMainWindow):
         try:
             salvar(self.projeto, caminho)
             self.caminho_arquivo = caminho
+            self._projeto_salvo = self.projeto
+            self._atualizar_titulo()
             self.statusBar().showMessage(f"Salvo: {caminho}")
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "Erro ao salvar", str(e))
