@@ -5,8 +5,8 @@ Sem Qt — `Resultado` construído à mão, sem rodar `core/methods`.
 from __future__ import annotations
 
 from soloref.core.methods import (
-    MetodoBishop, MetodoCoulomb, MetodoDoisBlocos, MetodoGeossintetico,
-    MetodoRankine,
+    MetodoBishop, MetodoCoulomb, MetodoDoisBlocos, MetodoEstabilidadeExterna,
+    MetodoGeossintetico, MetodoRankine,
 )
 from soloref.core.methods.base import Resultado
 from soloref.ui.resumo_map import resultado_calculado, resultado_para_resumo
@@ -62,5 +62,17 @@ def test_resultado_placeholder_nao_populado_para_nenhum_metodo():
     placeholder = Resultado(metodo="X")
     assert not resultado_calculado(placeholder)
     for metodo_cls in (MetodoCoulomb, MetodoRankine, MetodoDoisBlocos,
-                       MetodoBishop, MetodoGeossintetico):
+                       MetodoBishop, MetodoGeossintetico, MetodoEstabilidadeExterna):
         assert resultado_para_resumo(metodo_cls, placeholder) == {}
+
+
+def test_estabilidade_externa_popula_os_tres_fs():
+    r = Resultado(metodo="Estabilidade externa", fator_seguranca=5.02, extras={
+        "FS_desl": 5.02, "FS_tomb": 11.51, "FS_cap": 14.96,
+        "e_m": 0.217, "B_efetivo_m": 4.565, "sigma_v_kPa": 98.57,
+        "q_ult_kPa": 1474.9, "Pah_kN_m": 66.67, "Pav_kN_m": 0.0,
+        "N_kN_m": 450.0, "Nc": 30.14, "Nq": 18.40, "Ngama": 22.40,
+    })
+    assert resultado_para_resumo(MetodoEstabilidadeExterna, r) == {
+        "ext_fs_desl": 5.02, "ext_fs_tomb": 11.51, "ext_fs_cap": 14.96,
+    }

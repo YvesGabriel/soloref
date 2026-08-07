@@ -425,22 +425,27 @@ class MainWindow(QMainWindow):
         self.quadro.adicionar_situacao(self.projeto, resultados)
 
     def _comparar_metodos(self):
-        """Roda os 5 métodos para o projeto atual de uma vez e registra
-        tudo numa única coluna consolidada do Quadro Resumo — comparar é o
-        propósito central do programa, e hoje isso exigia registrar cada
-        método um a um. Métodos fora da faixa de validade (`avisos()`)
-        continuam rodando — não são pulados (ex.: Bishop num muro
-        vertical roda igual), só ficam marcados como tal no log e no
-        resumo da status bar.
+        """Roda os 5 métodos de cunha + a Estabilidade Externa para o
+        projeto atual de uma vez e registra tudo numa única coluna
+        consolidada do Quadro Resumo — comparar é o propósito central do
+        programa, e hoje isso exigia registrar cada método um a um.
+        Métodos fora da faixa de validade (`avisos()`) continuam rodando
+        — não são pulados (ex.: Bishop num muro vertical roda igual), só
+        ficam marcados como tal no log e no resumo da status bar.
         """
         projeto = self.painel_dados.resultado()
         self.projeto = projeto
+
+        # Índice de cache (0..4 os de cunha, _IDX_EXT a estabilidade
+        # externa) emparelhado com a classe do método.
+        metodos_e_indices = list(enumerate(_METODOS_POR_ABA))
+        metodos_e_indices.append((_IDX_EXT, MetodoEstabilidadeExterna))
 
         resultados: dict = {}
         calculados: list[str] = []
         fora_de_faixa: list[str] = []
         falhas: list[str] = []
-        for idx, metodo_cls in enumerate(_METODOS_POR_ABA):
+        for idx, metodo_cls in metodos_e_indices:
             metodo = metodo_cls()
             avisos = metodo.avisos(projeto)
             try:
@@ -463,7 +468,7 @@ class MainWindow(QMainWindow):
         self._abrir_resumo()
         self.quadro.adicionar_situacao(projeto, resultados)
 
-        msg = (f"Comparação: {len(calculados)}/{len(_METODOS_POR_ABA)} "
+        msg = (f"Comparação: {len(calculados)}/{len(metodos_e_indices)} "
                f"métodos registrados")
         if fora_de_faixa:
             msg += f" ({', '.join(fora_de_faixa)} fora de faixa)"

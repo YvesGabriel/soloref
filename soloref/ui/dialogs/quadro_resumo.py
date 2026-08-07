@@ -39,6 +39,9 @@ LINHAS = [
     "1ª inclinação da cunha (°)",
     "2ª inclinação da cunha (°)",
     "FS, Mét. Bishop",
+    "FS deslizamento",
+    "FS tombamento",
+    "FS capacidade de carga",
 ]
 
 N_SITUACOES = 8
@@ -118,7 +121,7 @@ class QuadroResumoWidget(QWidget):
             f"{g.inclinacao_face_beta_g:g}",
             f"{g.inclinacao_topo_i_g:g}",
             f"{g.altura_topo_Ht_m:g}",
-            "0",  # embutimento (ainda não temos no modelo)
+            f"{g.embutimento_m:g}",
             f"{a.angulo_atrito_g:g}",
             f"{a.angulo_atrito_blocos_g or 0:g}",
             f"{a.coesao_kN_m2:g}",
@@ -137,6 +140,9 @@ class QuadroResumoWidget(QWidget):
             _fmt(res.get("db_cunha1")),
             _fmt(res.get("db_cunha2")),
             _fmt(res.get("bishop_fs")),
+            _fmt(res.get("ext_fs_desl")),
+            _fmt(res.get("ext_fs_tomb")),
+            _fmt(res.get("ext_fs_cap")),
         ]
         for row, val in enumerate(valores):
             it = QTableWidgetItem(val)
