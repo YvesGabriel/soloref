@@ -32,6 +32,7 @@ from soloref.core.methods import (
     MetodoBishop,
     MetodoCoulomb,
     MetodoDoisBlocos,
+    MetodoEstabilidadeExterna,
     MetodoGeossintetico,
     MetodoRankine,
 )
@@ -44,6 +45,7 @@ METODOS = {
     "dois_blocos": MetodoDoisBlocos,
     "bishop": MetodoBishop,
     "geossintetico": MetodoGeossintetico,
+    "externa": MetodoEstabilidadeExterna,
 }
 
 
@@ -55,6 +57,11 @@ class CasoLiteratura:
     entradas: dict[str, Any] = field(default_factory=dict)
     esperado: dict[str, float] = field(default_factory=dict)
     tolerancia: float = 0.5  # erro relativo aceitável, em %
+    # kwargs do construtor do método (ex.: MetodoEstabilidadeExterna
+    # aceita fonte_phi_base — necessário pro benchmark EXT-REF-01, que usa
+    # o φ do aterro reforçado em vez do padrão "fundacao"). Vazio por
+    # padrão: todo método existente continua instanciado sem argumentos.
+    metodo_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 def monta_projeto(entradas: dict[str, Any]) -> Projeto:
@@ -168,5 +175,43 @@ CASOS: list[CasoLiteratura] = [
         },
         esperado={"Tmax_total_kN_m": 53.333},
         tolerancia=0.01,
+    ),
+    CasoLiteratura(
+        id="EXT-01",
+        metodo="externa",
+        fonte="exemplo condutor — bloco H=4, B=5, γ=20, φ=30, c=0, q=10; "
+        "fundação φ=30, c=15, γ=20; solo retido = mesmo φ=30, δ_ret=0 "
+        "(ver PROMPTS_ESTABILIDADE_EXTERNA.md, Parte A)",
+        entradas={
+            "geometria": {"altura_H_m": 4.0, "largura_aterro_B_m": 5.0,
+                          "inclinacao_topo_i_g": 0.0},
+            "solo_aterro": {"peso_especifico_kN_m3": 20.0, "angulo_atrito_g": 30.0,
+                            "coesao_kN_m2": 0.0},
+            "solo_fundacao": {"peso_especifico_kN_m3": 20.0, "angulo_atrito_g": 30.0,
+                              "coesao_kN_m2": 15.0},
+            "sobrecarga": {"uniforme_q_kN_m2": 10.0},
+        },
+        esperado={"FS_desl": 5.02, "FS_tomb": 11.51, "FS_cap": 14.96},
+        tolerancia=0.5,
+    ),
+    CasoLiteratura(
+        id="EXT-REF-01",
+        metodo="externa",
+        fonte="REF — Wesley (2009), Fundamentals of Soil Mechanics, muro de "
+        "solo reforçado: bloco H=9, B=3,7; aterro γ=18,2 φ=35; solo retido "
+        "γ=16,8 φ=26 c=0 com δ_ret=φ_ret=26° (empuxo inclinado); φ_base = "
+        "aterro reforçado (35°); sem sobrecarga",
+        entradas={
+            "geometria": {"altura_H_m": 9.0, "largura_aterro_B_m": 3.7},
+            "solo_aterro": {"peso_especifico_kN_m3": 18.2, "angulo_atrito_g": 35.0,
+                            "coesao_kN_m2": 0.0},
+            "solo_encosta": {"peso_especifico_kN_m3": 16.8, "angulo_atrito_g": 26.0,
+                             "coesao_kN_m2": 0.0, "angulo_atrito_blocos_g": 26.0},
+            "sobrecarga": {"uniforme_q_kN_m2": 0.0},
+        },
+        esperado={"Pah_kN_m": 265.7, "Pav_kN_m": 129.6, "FS_desl": 1.94,
+                  "FS_tomb": 2.00},
+        tolerancia=1.0,
+        metodo_kwargs={"fonte_phi_base": "aterro"},
     ),
 ]

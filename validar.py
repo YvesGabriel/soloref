@@ -103,7 +103,7 @@ def avaliar_caso(caso, logger: logging.Logger) -> list[ResultadoCaso]:
     try:
         projeto = monta_projeto(caso.entradas)
         metodo_cls = METODOS[caso.metodo]
-        resultado = metodo_cls().calcular(projeto)
+        resultado = metodo_cls(**caso.metodo_kwargs).calcular(projeto)
     except Exception as exc:  # método ainda não implementado ou instável
         logger.exception("Falha ao calcular caso %s", caso.id)
         for campo, esperado in caso.esperado.items():
