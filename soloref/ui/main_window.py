@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 
 from ..core.methods import (
     MetodoCoulomb, MetodoRankine, MetodoDoisBlocos, MetodoBishop,
-    MetodoGeossintetico,
+    MetodoGeossintetico, MetodoEstabilidadeExterna,
 )
 from ..core.models import Projeto
 from ..core.persistence import salvar, carregar
@@ -54,6 +54,10 @@ _METODOS_POR_ABA = [
     MetodoGeossintetico,
 ]
 _IDX_RANKINE = 1
+# Índice de cache dedicado à Estabilidade Externa — fora da faixa 0..4 dos
+# métodos de cunha (não é uma "aba" do grupo exclusivo, é uma verificação
+# à parte, mas ainda se beneficia do mesmo cache por método).
+_IDX_EXT = 5
 
 # Siglas dos métodos que rodam otimização (scipy) e podem demorar o
 # bastante para justificar cursor de ocupado + mensagem na status bar.
@@ -201,7 +205,11 @@ class MainWindow(QMainWindow):
         self.act_comparar.triggered.connect(self._comparar_metodos)
 
         self.act_ext = QAction("Estabilidade e&xterna", self)
-        self.act_ext.triggered.connect(self._nao_impl)
+        self.act_ext.setToolTip(
+            "Trata o maciço reforçado como bloco rígido: deslizamento, "
+            "tombamento e capacidade de carga da fundação."
+        )
+        self.act_ext.triggered.connect(self._calcular_externa)
 
         self.act_resu = QAction("Quadro Res&umo", self)
         self.act_resu.triggered.connect(self._abrir_resumo)
@@ -327,21 +335,22 @@ class MainWindow(QMainWindow):
         self._cache.guardar(idx, projeto, resultado)
         return resultado
 
-    def _calcular(self, aba: int):
-        """Roda o método `aba`, atualiza esquema + painel de resultados e
-        registra no log. Não mexe no Quadro Resumo. Devolve (metodo,
-        resultado) ou (None, None) em caso de erro.
+    def _calcular_metodo(self, metodo, cache_idx: int):
+        """Núcleo comum a todos os métodos — os 5 de cunha (`_calcular`) e
+        a Estabilidade Externa (`_calcular_externa`): cache, esquema (com
+        overlay), painel de resultados, log e status bar. Não mexe no
+        Quadro Resumo. Devolve (metodo, resultado) ou (metodo, None) em
+        caso de erro.
         """
         projeto = self.painel_dados.resultado()
         self.projeto = projeto
-        metodo = _METODOS_POR_ABA[aba]()
         self.painel_dados.destacar_metodo(metodo.sigla)
         try:
-            resultado = self._calcular_com_cache(aba, metodo, projeto)
+            resultado = self._calcular_com_cache(cache_idx, metodo, projeto)
         except Exception as e:  # noqa: BLE001
             logger.exception("Erro ao calcular %s", metodo.nome)
             self.statusBar().showMessage(f"Erro ao calcular {metodo.nome}: {e}")
-            return None, None
+            return metodo, None
 
         self.esquema.atualizar(projeto)
         self.esquema.mostrar_resultado(metodo.sigla, resultado)
@@ -375,6 +384,25 @@ class MainWindow(QMainWindow):
                 f"{metodo.nome}: cálculo ainda não implementado"
             )
         return metodo, resultado
+
+    def _calcular(self, aba: int):
+        """Roda um dos 5 métodos de cunha (índice `aba`, mesmo índice do
+        cache) pelo núcleo comum `_calcular_metodo`."""
+        metodo = _METODOS_POR_ABA[aba]()
+        return self._calcular_metodo(metodo, aba)
+
+    def _calcular_externa(self):
+        """Estabilidade externa: mesmo caminho dos 5 métodos de cunha
+        (cache, esquema, painel, log) via `_calcular_metodo`, mas fora do
+        grupo exclusivo da navbar — é uma verificação à parte, não uma
+        "aba" de cunha, então não mexe em `_metodo_atual`. O botão
+        "Registrar no quadro" do painel de resultados continua ligado ao
+        último método de cunha selecionado (`_metodo_atual`), não a este
+        — juntar os dois no Quadro Resumo é trabalho da próxima tarefa
+        (Comparar métodos já vai incluir a estabilidade externa lá).
+        """
+        metodo = MetodoEstabilidadeExterna()
+        return self._calcular_metodo(metodo, _IDX_EXT)
 
     def _selecionar_metodo(self, aba: int):
         """Troca de método na navbar: recalcula e mostra, sem registrar."""

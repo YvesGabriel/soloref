@@ -34,18 +34,15 @@ from .dialogs.entrada_dados import (
 _ABAS_ORDENADAS = (
     ("Geometria", relevancia.ABA_GEOMETRIA),
     ("Solo aterro", relevancia.ABA_ATERRO),
-    ("Solo encosta (estab. externa)", relevancia.ABA_ENCOSTA),
-    ("Solo fundação (estab. externa)", relevancia.ABA_FUNDACAO),
-    ("Face (estab. externa)", relevancia.ABA_FACE),
+    ("Solo encosta", relevancia.ABA_ENCOSTA),
+    ("Solo fundação", relevancia.ABA_FUNDACAO),
+    ("Face (reservado)", relevancia.ABA_FACE),
     ("Sobrecarga", relevancia.ABA_SOBRECARGA),
     ("Reforço", relevancia.ABA_REFORCO),
     ("Identificação", relevancia.ABA_IDENTIFICACAO),
 )
 
-_AVISO_RESERVADA = (
-    "Estes campos ainda não entram no dimensionamento atual — reservados "
-    "para a futura verificação de estabilidade externa."
-)
+_AVISO_RESERVADA = "Estes campos ainda não entram em nenhum cálculo implementado."
 
 _COR_RELEVANTE = QColor("#0b3d91")
 _COR_ATENUADA = QColor("#9e9e9e")
@@ -93,9 +90,12 @@ class PainelDados(QWidget):
         self.aba_geometria = _AbaGeometria(projeto.geometria)
         self.aba_aterro = _AbaSolo(projeto.solo_aterro, com_atrito_blocos=True)
         self.aba_encosta = _AbaSolo(
-            projeto.solo_encosta, com_atrito_blocos=False,
-            observacoes="Obs. Os parâmetros do solo de encosta não são "
-                        "necessários no dimensionamento.",
+            projeto.solo_encosta, com_atrito_blocos=True,
+            rotulo_atrito_blocos="Atrito solo-muro do retido, δ_ret (graus)",
+            default_atrito_blocos=0.0,
+            observacoes="Obs. Descreve o solo retido atrás do maciço "
+                        "reforçado — usado na Estabilidade externa para o "
+                        "empuxo motor (δ_ret=0 é o padrão conservador).",
         )
         self.aba_fundacao = _AbaSolo(projeto.solo_fundacao, com_atrito_blocos=False)
         self.aba_face = _AbaFace(projeto.face)
@@ -111,8 +111,7 @@ class PainelDados(QWidget):
         for widget, (rotulo, _chave) in zip(self._abas_widgets, _ABAS_ORDENADAS):
             self.tabs.addTab(widget, rotulo)
 
-        for widget in (self.aba_encosta, self.aba_fundacao, self.aba_face):
-            _marcar_reservada(widget)
+        _marcar_reservada(self.aba_face)
 
         self._ligar_live_update()
         self.destacar_metodo(None)

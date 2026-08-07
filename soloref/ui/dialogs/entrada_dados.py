@@ -140,7 +140,9 @@ class _AbaFace(QWidget):
 
 class _AbaSolo(QWidget):
     def __init__(self, solo: Solo, *, com_atrito_blocos: bool,
-                 observacoes: str | None = None):
+                 observacoes: str | None = None,
+                 rotulo_atrito_blocos: str = "Ângulo de atrito entre blocos (graus)",
+                 default_atrito_blocos: float = 30.0):
         super().__init__()
         self.peso = _spin(solo.peso_especifico_kN_m3)
         self.coesao = _spin(solo.coesao_kN_m2, minimum=0)
@@ -152,10 +154,10 @@ class _AbaSolo(QWidget):
         form.addRow("Coesão (kN/m²)", self.coesao)
         form.addRow("Ângulo de atrito (graus)", self.atrito)
         if com_atrito_blocos:
-            v = solo.angulo_atrito_blocos_g if solo.angulo_atrito_blocos_g is not None else 30.0
+            v = (solo.angulo_atrito_blocos_g if solo.angulo_atrito_blocos_g is not None
+                 else default_atrito_blocos)
             self.atrito_blocos = _spin(v, minimum=0, maximum=60)
-            form.addRow("Ângulo de atrito entre blocos (graus)",
-                        self.atrito_blocos)
+            form.addRow(rotulo_atrito_blocos, self.atrito_blocos)
 
         if observacoes:
             obs = QLabel(observacoes)

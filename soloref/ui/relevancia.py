@@ -3,8 +3,7 @@
 Sem dependência de Qt — só dados, para poder ser testado sem abrir janela.
 `PainelDados` (panels.py) usa isso para destacar as abas relevantes e atenuar
 as demais quando o usuário troca de método ativo, e para marcar como
-"reservadas" as abas cujos campos nenhum método implementado hoje consome
-(estabilidade externa, ainda não implementada).
+"reservadas" as abas cujos campos nenhum método implementado hoje consome.
 
 Fonte de verdade: o que cada `calcular()` de fato lê em `core/methods/*.py`.
 """
@@ -20,10 +19,12 @@ ABA_SOBRECARGA = "sobrecarga"
 ABA_REFORCO = "reforco"
 ABA_IDENTIFICACAO = "identificacao"
 
-# Abas que hoje não alimentam NENHUM método implementado — reservadas para
-# a estabilidade externa (deslizamento, tombamento, capacidade de carga),
-# ainda não implementada (ver PLANO_IMPLEMENTACAO.md).
-ABAS_RESERVADAS = (ABA_ENCOSTA, ABA_FUNDACAO, ABA_FACE)
+# Abas que hoje não alimentam NENHUM método implementado — reservadas.
+# "Solo encosta" e "Solo fundação" saíram daqui quando a Estabilidade
+# Externa passou a consumi-las (solo retido / atrito e capacidade de
+# carga da fundação, respectivamente); "Face" segue sem nenhum método
+# que a leia.
+ABAS_RESERVADAS = (ABA_FACE,)
 
 # sigla do método (`MetodoAnalise.sigla`) -> {aba: (campos usados, ...)}.
 # Só entram abas efetivamente lidas por `calcular()`; abas em
@@ -53,6 +54,13 @@ _RELEVANCIA: dict[str, dict[str, tuple[str, ...]]] = {
         ABA_ATERRO: ("γ", "φ"),
         ABA_SOBRECARGA: ("q",),
         ABA_REFORCO: ("todos",),
+    },
+    "Ext": {
+        ABA_GEOMETRIA: ("H", "B"),
+        ABA_ATERRO: ("γ",),
+        ABA_ENCOSTA: ("γ", "φ", "δ"),
+        ABA_FUNDACAO: ("γ", "φ", "c"),
+        ABA_SOBRECARGA: ("q",),
     },
 }
 

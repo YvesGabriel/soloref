@@ -136,3 +136,65 @@ def test_sem_referencia_disponivel_nao_gera_cartao_de_comparacao():
                          inclinacao_cunha_g=54.3, extras={})
     cartoes = interpretacao.cartoes_resultado("Coul", coulomb, Projeto(), referencia=None)
     assert not any(c.rotulo == "Comparação com Rankine" for c in cartoes)
+
+
+# --------------------------------------------------------------------------- #
+# Estabilidade externa — três selos ADEQUADO/INSUFICIENTE + excentricidade
+# --------------------------------------------------------------------------- #
+def _resultado_ext(**extras_override):
+    extras = {
+        "FS_desl": 5.02, "FS_tomb": 11.51, "FS_cap": 14.96,
+        "e_m": 0.217, "Pah_kN_m": 66.67, "Pav_kN_m": 0.0,
+    }
+    extras.update(extras_override)
+    return Resultado(metodo="Estabilidade externa", fator_seguranca=5.02, extras=extras)
+
+
+def test_estabilidade_externa_tudo_adequado():
+    projeto = replace(Projeto(), geometria=replace(Projeto().geometria, largura_aterro_B_m=5.0))
+    cartoes = interpretacao.cartoes_resultado("Ext", _resultado_ext(), projeto)
+
+    for rotulo in ("Deslizamento (FS)", "Tombamento (FS)", "Capacidade de carga (FS)"):
+        cartao = _cartao(cartoes, rotulo)
+        assert cartao.selo_texto == "ADEQUADO"
+        assert cartao.selo_ok is True
+
+    exc = _cartao(cartoes, "Excentricidade")
+    assert exc.selo_texto == "OK"
+    assert exc.selo_ok is True
+
+
+def test_estabilidade_externa_fs_baixo_e_insuficiente():
+    # FS_desl=1.0 < alvo 1,5 -> INSUFICIENTE; os outros dois continuam OK.
+    projeto = replace(Projeto(), geometria=replace(Projeto().geometria, largura_aterro_B_m=5.0))
+    cartoes = interpretacao.cartoes_resultado(
+        "Ext", _resultado_ext(FS_desl=1.0), projeto
+    )
+    desl = _cartao(cartoes, "Deslizamento (FS)")
+    assert desl.selo_texto == "INSUFICIENTE"
+    assert desl.selo_ok is False
+    assert _cartao(cartoes, "Tombamento (FS)").selo_ok is True
+
+
+def test_estabilidade_externa_excentricidade_fora_do_nucleo_e_alerta():
+    projeto = replace(Projeto(), geometria=replace(Projeto().geometria, largura_aterro_B_m=1.0))
+    # B/6 = 0,167 m; e=1,086 m está bem fora.
+    cartoes = interpretacao.cartoes_resultado(
+        "Ext", _resultado_ext(e_m=1.086), projeto
+    )
+    exc = _cartao(cartoes, "Excentricidade")
+    assert exc.selo_texto == "ALERTA"
+    assert exc.selo_ok is False
+
+
+def test_estabilidade_externa_selos_usam_os_alvos_do_metodo_core():
+    # Os alvos não são reimplementados em interpretacao.py — vêm direto de
+    # MetodoEstabilidadeExterna, fonte única de verdade (Tarefa 1).
+    from soloref.core.methods.estabilidade_externa import MetodoEstabilidadeExterna
+
+    projeto = Projeto()
+    fs_no_limite = MetodoEstabilidadeExterna.FS_ALVO_TOMBAMENTO
+    cartoes = interpretacao.cartoes_resultado(
+        "Ext", _resultado_ext(FS_tomb=fs_no_limite), projeto
+    )
+    assert _cartao(cartoes, "Tombamento (FS)").selo_texto == "ADEQUADO"

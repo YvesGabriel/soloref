@@ -12,6 +12,7 @@ import math
 from dataclasses import dataclass
 
 from ..core.methods.base import Resultado
+from ..core.methods.estabilidade_externa import MetodoEstabilidadeExterna
 from ..core.models import Projeto
 
 # Nome curto p/ o texto de comparação ("Coulomb 11% abaixo de Rankine").
@@ -46,6 +47,8 @@ def cartoes_resultado(sigla: str, resultado: Resultado, projeto: Projeto,
         return _cartoes_geossintetico(resultado)
     if sigla == "Bish":
         return _cartoes_bishop(resultado, projeto)
+    if sigla == "Ext":
+        return _cartoes_estabilidade_externa(resultado, projeto)
     return _cartoes_empuxo(sigla, resultado, projeto, referencia)
 
 
@@ -66,6 +69,47 @@ def _cartoes_bishop(resultado: Resultado, projeto: Projeto) -> list[Cartao]:
         Cartao("Centro (x, y)",
                f"({e.get('xc_m', 0.0):.1f}, {e.get('yc_m', 0.0):.1f})"),
     ]
+
+
+# --------------------------------------------------------------------------- #
+def _selo_fs(fs: float, alvo: float) -> tuple[str, bool]:
+    ok = fs >= alvo
+    return ("ADEQUADO" if ok else "INSUFICIENTE"), ok
+
+
+def _cartoes_estabilidade_externa(resultado: Resultado, projeto: Projeto) -> list[Cartao]:
+    """Deslizamento, tombamento e capacidade de carga — cada um com o FS
+    e o selo ADEQUADO/INSUFICIENTE contra o alvo definido em
+    `MetodoEstabilidadeExterna` (fonte única de verdade dos alvos — não
+    duplicados aqui). Mais um cartão de excentricidade contra o limite
+    do núcleo central (B/6).
+    """
+    e = resultado.extras
+    B = projeto.geometria.largura_aterro_B_m
+
+    fs_desl = e.get("FS_desl", 0.0)
+    texto, ok = _selo_fs(fs_desl, MetodoEstabilidadeExterna.FS_ALVO_DESLIZAMENTO)
+    cartoes = [Cartao("Deslizamento (FS)", f"{fs_desl:.2f}", texto, ok)]
+
+    fs_tomb = e.get("FS_tomb", 0.0)
+    texto, ok = _selo_fs(fs_tomb, MetodoEstabilidadeExterna.FS_ALVO_TOMBAMENTO)
+    cartoes.append(Cartao("Tombamento (FS)", f"{fs_tomb:.2f}", texto, ok))
+
+    fs_cap = e.get("FS_cap", 0.0)
+    texto, ok = _selo_fs(fs_cap, MetodoEstabilidadeExterna.FS_ALVO_CAPACIDADE)
+    cartoes.append(Cartao("Capacidade de carga (FS)", f"{fs_cap:.2f}", texto, ok))
+
+    e_m = e.get("e_m")
+    if e_m is not None and B > 0:
+        limite = B / 6.0
+        dentro_do_nucleo = abs(e_m) <= limite
+        cartoes.append(Cartao(
+            "Excentricidade",
+            f"{e_m:.3f} m (limite B/6={limite:.3f} m)",
+            "OK" if dentro_do_nucleo else "ALERTA",
+            dentro_do_nucleo,
+        ))
+    return cartoes
 
 
 # --------------------------------------------------------------------------- #

@@ -35,6 +35,7 @@ _COR_OVERLAY = {
     "DB": QColor("#6a1b9a"),
     "Bish": QColor("#2e7d32"),
     "Ref": QColor("#e65100"),
+    "Ext": QColor("#ad1457"),
 }
 
 
@@ -262,6 +263,8 @@ class EsquemaWidget(QWidget):
                 return self._overlay_circulo(p, transf, resultado)
             if sigla == "Ref":
                 return self._overlay_camadas(p, transf, H, resultado)
+            if sigla == "Ext":
+                return self._overlay_estabilidade_externa(p, transf, H, resultado)
         except Exception:  # noqa: BLE001 — desenho não pode derrubar a UI
             logger.exception("Falha ao desenhar overlay de resultado (%s)", sigla)
         return False
@@ -349,6 +352,54 @@ class EsquemaWidget(QWidget):
                 topo = y_m
         rotulo_pt = self._w2s(0.0, topo if topo is not None else H, *transf)
         self._rotulo(p, rotulo_pt, f"{int(n_camadas)} camadas", cor)
+        return True
+
+    def _overlay_estabilidade_externa(self, p: QPainter, transf, H: float,
+                                       resultado: Resultado) -> bool:
+        """Estabilidade externa: o bloco reforçado idealizado (retângulo
+        B×H, tracejado — a verificação trata o maciço como um bloco
+        rígido, não segue a face inclinada do polígono real), a
+        resultante vertical N na base (deslocada pela excentricidade e a
+        partir do centro) e a seta do empuxo motor Eah a H/3, empurrando
+        o bloco a partir do contato com o solo retido (x=B)."""
+        e = resultado.extras
+        e_m = e.get("e_m")
+        Pah = e.get("Pah_kN_m")
+        B = self.projeto.geometria.largura_aterro_B_m
+        if e_m is None or Pah is None or B <= 0 or H <= 0:
+            return False
+        cor = _COR_OVERLAY["Ext"]
+
+        # Bloco reforçado idealizado (B×H).
+        p0 = self._w2s(0.0, 0.0, *transf)
+        p1 = self._w2s(0.0, H, *transf)
+        p2 = self._w2s(B, H, *transf)
+        p3 = self._w2s(B, 0.0, *transf)
+        p.setPen(QPen(cor, 1.5, Qt.DashLine))
+        for a, b in ((p0, p1), (p1, p2), (p2, p3), (p3, p0)):
+            p.drawLine(a, b)
+
+        # Resultante N, na base, à distância a=B/2-e do pé (grampeada a
+        # [0,B] — uma excentricidade extrema não pode jogar a seta pra
+        # fora do desenho).
+        a_m = max(0.0, min(B, B / 2.0 - e_m))
+        pn_base = self._w2s(a_m, 0.0, *transf)
+        pn_topo = self._w2s(a_m, H * 0.2, *transf)
+        p.setPen(QPen(cor, 2))
+        p.drawLine(pn_topo, pn_base)
+        p.drawLine(pn_base, QPointF(pn_base.x() - 4, pn_base.y() - 7))
+        p.drawLine(pn_base, QPointF(pn_base.x() + 4, pn_base.y() - 7))
+        self._rotulo(p, pn_topo, "N", cor)
+
+        # Empuxo motor Eah, horizontal a H/3, empurrando o bloco (do
+        # contato com o retido, x=B, em direção ao pé, x=0).
+        p_ini = self._w2s(B, H / 3.0, *transf)
+        p_fim = QPointF(p_ini.x() - 45, p_ini.y())
+        p.drawLine(p_ini, p_fim)
+        p.drawLine(p_fim, QPointF(p_fim.x() + 7, p_fim.y() - 4))
+        p.drawLine(p_fim, QPointF(p_fim.x() + 7, p_fim.y() + 4))
+        self._rotulo(p, QPointF(p_fim.x(), p_fim.y() - 16),
+                     f"Eah={Pah:.0f} kN/m", cor)
         return True
 
     @staticmethod
