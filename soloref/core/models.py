@@ -31,6 +31,7 @@ class Geometria:
     inclinacao_encosta_beta_e_g: float = 90.0  # Inclinação da encosta, βe (graus)
     inclinacao_topo_i_g: float = 0.0   # Inclinação do talude de topo, i (graus)
     altura_topo_Ht_m: float = 0.0      # Altura do talude de topo, Ht (m)
+    embutimento_m: float = 0.0       # Embutimento da fundação, D (m) — estabilidade externa
 
 
 # --------------------------------------------------------------------------- #

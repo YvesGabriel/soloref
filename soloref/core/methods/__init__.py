@@ -10,6 +10,7 @@ from .rankine import MetodoRankine
 from .dois_blocos import MetodoDoisBlocos
 from .bishop import MetodoBishop
 from .geossintetico import MetodoGeossintetico
+from .estabilidade_externa import MetodoEstabilidadeExterna
 
 __all__ = [
     "MetodoAnalise",
@@ -19,4 +20,5 @@ __all__ = [
     "MetodoDoisBlocos",
     "MetodoBishop",
     "MetodoGeossintetico",
+    "MetodoEstabilidadeExterna",
 ]
