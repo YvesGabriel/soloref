@@ -176,6 +176,105 @@ CASOS: list[CasoLiteratura] = [
         esperado={"Tmax_total_kN_m": 53.333},
         tolerancia=0.01,
     ),
+    # ------------------------------------------------------------------ #
+    # Casos de literatura conferidos independentemente (ver
+    # "Casos de validação — métodos geotécnicos do SoloRef"). REF = valor
+    # publicado; ORACLE = derivado de expressão publicada. Todos os valores
+    # abaixo foram reproduzidos pelo código real (empuxo) ou por
+    # recálculo independente (Bishop) dentro da tolerância indicada.
+    # ------------------------------------------------------------------ #
+    CasoLiteratura(
+        id="RANK-ORACLE-02",
+        metodo="rankine",
+        fonte="ORACLE — USACE EM 1110-2-2502, Ka=tan²(45-φ/2) (H=6, γ=18, φ=30)",
+        entradas={
+            "geometria": {"altura_H_m": 6.0, "inclinacao_topo_i_g": 0.0},
+            "solo_aterro": {"peso_especifico_kN_m3": 18.0, "angulo_atrito_g": 30.0,
+                            "coesao_kN_m2": 0.0},
+            "sobrecarga": {"uniforme_q_kN_m2": 0.0},
+        },
+        esperado={"solicitacao_kN_m": 108.0, "inclinacao_cunha_g": 60.0, "Ka": 0.33333},
+        tolerancia=0.1,
+    ),
+    CasoLiteratura(
+        id="RANK-ORACLE-03",
+        metodo="rankine",
+        fonte="ORACLE — Rankine com sobrecarga, Ea=½KaγH²+KaqH (H=6, γ=18, φ=30, q=20)",
+        entradas={
+            "geometria": {"altura_H_m": 6.0, "inclinacao_topo_i_g": 0.0},
+            "solo_aterro": {"peso_especifico_kN_m3": 18.0, "angulo_atrito_g": 30.0,
+                            "coesao_kN_m2": 0.0},
+            "sobrecarga": {"uniforme_q_kN_m2": 20.0},
+        },
+        esperado={"solicitacao_kN_m": 148.0},
+        tolerancia=0.1,
+    ),
+    CasoLiteratura(
+        id="COUL-REF-01",
+        metodo="coulomb",
+        fonte="REF — Wesley (2009), Fundamentals of Soil Mechanics, cap.13 Ex.1 "
+        "(H=8, β=90, i=15, γ=18.5, φ=28, δ=0): Ea=261.1 kN/m, cunha=53°",
+        entradas={
+            "geometria": {"altura_H_m": 8.0, "inclinacao_face_beta_g": 90.0,
+                          "inclinacao_topo_i_g": 15.0},
+            "solo_aterro": {"peso_especifico_kN_m3": 18.5, "angulo_atrito_g": 28.0,
+                            "coesao_kN_m2": 0.0, "angulo_atrito_blocos_g": 0.0},
+            "sobrecarga": {"uniforme_q_kN_m2": 0.0},
+        },
+        esperado={"solicitacao_kN_m": 261.1, "inclinacao_cunha_g": 53.0},
+        tolerancia=1.0,
+    ),
+    CasoLiteratura(
+        id="COUL-REF-02",
+        metodo="coulomb",
+        fonte="REF — Ka de Coulomb com atrito de muro (φ=30, δ=20, β=90, i=0): Ka≈0.297",
+        entradas={
+            "geometria": {"inclinacao_face_beta_g": 90.0, "inclinacao_topo_i_g": 0.0},
+            "solo_aterro": {"angulo_atrito_g": 30.0, "angulo_atrito_blocos_g": 20.0},
+        },
+        esperado={"Ka": 0.297},
+        tolerancia=0.5,
+    ),
+    CasoLiteratura(
+        id="COUL-REF-03",
+        metodo="coulomb",
+        fonte="REF/IDENTIDADE — USACE: δ=0, β=90, i=0 reduz Coulomb a Rankine "
+        "(H=6, γ=18, φ=30): Ka=1/3, Ea=108",
+        entradas={
+            "geometria": {"altura_H_m": 6.0, "inclinacao_face_beta_g": 90.0,
+                          "inclinacao_topo_i_g": 0.0},
+            "solo_aterro": {"peso_especifico_kN_m3": 18.0, "angulo_atrito_g": 30.0,
+                            "coesao_kN_m2": 0.0, "angulo_atrito_blocos_g": 0.0},
+        },
+        esperado={"Ka": 0.33333, "solicitacao_kN_m": 108.0},
+        tolerancia=0.1,
+    ),
+    CasoLiteratura(
+        id="BISH-REF-02",
+        metodo="bishop",
+        fonte="REF — Wesley (2009), cap.14 Ex.3(a): talude H=15, β=47, γ=16.8, "
+        "φ=30, c=23 (seco) → FS≈1.50 (recálculo independente: 1.478)",
+        entradas={
+            "geometria": {"altura_H_m": 15.0, "inclinacao_face_beta_g": 47.0},
+            "solo_aterro": {"peso_especifico_kN_m3": 16.8, "angulo_atrito_g": 30.0,
+                            "coesao_kN_m2": 23.0},
+        },
+        esperado={"fator_seguranca": 1.50},
+        tolerancia=3.0,
+    ),
+    CasoLiteratura(
+        id="BISH-REF-03",
+        metodo="bishop",
+        fonte="REF — Wesley (2009), cap.14 Ex.1(b): talude H=10, β=45, γ=17, "
+        "φ=35, c=21 (seco) → FS=1.98 (recálculo independente: 1.952)",
+        entradas={
+            "geometria": {"altura_H_m": 10.0, "inclinacao_face_beta_g": 45.0},
+            "solo_aterro": {"peso_especifico_kN_m3": 17.0, "angulo_atrito_g": 35.0,
+                            "coesao_kN_m2": 21.0},
+        },
+        esperado={"fator_seguranca": 1.98},
+        tolerancia=2.5,
+    ),
     CasoLiteratura(
         id="EXT-01",
         metodo="externa",
