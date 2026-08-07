@@ -72,12 +72,13 @@ SoloRef/
 │   │   ├── persistence.py        ← salvar/carregar JSON
 │   │   └── methods/              ← um arquivo por método, todos implementados
 │   │       ├── __init__.py
-│   │       ├── base.py           ← classe abstrata MetodoAnalise + Resultado
+│   │       ├── base.py           ← classe abstrata MetodoAnalise + Resultado + avisos()
 │   │       ├── coulomb.py        ← fórmula fechada + busca de cunha (trial wedge)
 │   │       ├── rankine.py        ← fórmula fechada (horizontal e talude)
 │   │       ├── dois_blocos.py    ← cunha bilinear, busca numérica (sem fórmula fechada)
 │   │       ├── bishop.py         ← fatias + iteração de FS, busca do círculo crítico
-│   │       └── geossintetico.py  ← dimensionamento de camadas (equilíbrio-limite/tieback)
+│   │       ├── geossintetico.py  ← dimensionamento de camadas (equilíbrio-limite/tieback)
+│   │       └── estabilidade_externa.py  ← bloco rígido: deslizamento/tombamento/capacidade (Vésic)
 │   │
 │   └── ui/                       ← INTERFACE (PySide6) — janela única de 3 painéis
 │       ├── __init__.py
@@ -88,13 +89,14 @@ SoloRef/
 │       ├── resumo_map.py         ← SEM Qt: Resultado -> linhas do Quadro Resumo
 │       ├── estado_projeto.py     ← SEM Qt: "há alterações não salvas?"
 │       ├── cache_resultados.py   ← SEM Qt: cache de Resultado por método
+│       ├── geometria_segura.py   ← SEM Qt: divisão segura por tangente (esquema)
 │       └── dialogs/
 │           ├── __init__.py
 │           ├── entrada_dados.py    ← as classes `_Aba*` (reaproveitadas por panels.py);
 │           │                         `EntradaDadosDialog` é resíduo da versão MDI, não usado
 │           ├── esquema_widget.py   ← desenho do muro + superfície crítica do método ativo
 │           ├── metodo_info.py      ← diálogo "Hipóteses / figura", aberto por botão
-│           └── quadro_resumo.py    ← tabela das últimas 8 situações (23 linhas)
+│           └── quadro_resumo.py    ← tabela das últimas 8 situações (27 linhas)
 │
 └── tests/
     ├── __init__.py
@@ -138,6 +140,7 @@ SoloRef/
 | `dois_blocos.py` | `MetodoDoisBlocos` — **implementado**, sem fórmula fechada. Cunha bilinear tipo "two-part wedge": interface vertical entre os dois blocos, força de interação horizontal (simplificação documentada no módulo). Busca da superfície crítica por grade + `scipy.optimize`. | Ver a limitação documentada no topo do arquivo (δ próximo de φ fica ~10-15% acima de Coulomb, não os ~1-3% típicos) antes de mexer na busca. |
 | `bishop.py` | `MetodoBishop` — **implementado**. Fatias sobre um círculo restrito a passar pelo pé do talude ("toe circle" — reduz a busca a 2 parâmetros, centro (xc,yc)); FS por iteração de ponto fixo (`mα`); busca do círculo crítico por grade + refino. Reaproveita `inclinacao_face_beta_g` como ângulo do talude (não da parede) — ver ressalva no docstring. | Generalizar para círculos que não passam pelo pé, ou separar o campo de ângulo do talude do campo de ângulo da parede em `models.py`. |
 | `geossintetico.py` | `MetodoGeossintetico` — **implementado**. Equilíbrio-limite/tieback estilo FHWA GEC-011: `σv`, `σh=Ka·σv`, `Tadm` com os 3 fatores de redução, `La`/`Le`. Espaçamento uniforme dimensionado pela condição mais crítica (base do maciço); profundidade de cada camada é o **ponto médio** da zona tributária (não o topo) — é isso que faz `ΣTmax` reproduzir Rankine quase exatamente, ver docstring do módulo. | Implementar espaçamento variável por camada (método FHWA completo, hoje simplificado para uniforme), ou compor com Coulomb/Dois Blocos em vez de só Rankine. |
+| `estabilidade_externa.py` | `MetodoEstabilidadeExterna` — **implementado**. Trata o maciço reforçado como bloco rígido: deslizamento (`Fr=(N+Pav)·tanφ_base+c_base·B`), tombamento (`M_estab/M_tomb`, excentricidade `e`) e capacidade de carga (Vésic, `B'=B-2e`, fatores `Nc/Nq/Nγ` numa função pura `fatores_vesic`). O empuxo motor **reaproveita `MetodoRankine.calcular()`** sobre um `Projeto` temporário com `solo_aterro=solo_encosta` — não duplica Ka. Único método cujo construtor aceita argumento (`fonte_phi_base="fundacao"` ou `"aterro"`) — necessário pro benchmark EXT-REF-01 (Wesley). | Mudar a fonte de φ_base/c_base, generalizar a capacidade de carga (hoje só sapata corrida), ou expor `fonte_phi_base` na UI (hoje só configurável instanciando a classe direto, ex. em testes). |
 | `__init__.py` | Reexporta todas as classes de método. | Quando criar um novo método, adicionar import aqui. |
 
 **Padrão para implementar um cálculo real**: ver seção 5.1 (Cookbook) — o exemplo ali
@@ -165,16 +168,26 @@ A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
 - Três painéis no centro (`PainelDados` | `EsquemaWidget` | `PainelResultados`,
   num `QSplitter`) e o `QuadroResumoWidget` como `QDockWidget` na base.
 - **Status bar** na base.
-- `_calcular(aba)`: roda o método `aba` via `_calcular_com_cache` (cache por
-  método — ver `cache_resultados.py` abaixo), atualiza esquema + painel de
-  resultados, mostra o primeiro `metodo.avisos(projeto)` na status bar (ou o
-  resumo do resultado, se não houver aviso). Não mexe no Quadro Resumo.
-- `_selecionar_metodo(aba)`: troca de método na navbar — recalcula (ou usa o
-  cache) e mostra, **sem** registrar no Quadro Resumo.
-- `_mostrar_metodo(aba)`: o botão "Registrar no quadro" — recalcula/mostra **e**
-  registra uma situação.
-- `_comparar_metodos()`: roda os 5 métodos de uma vez (reaproveitando o cache
-  do que já estiver calculado) e registra tudo numa única coluna consolidada.
+- `_calcular_metodo(metodo, cache_idx)`: o núcleo comum a **todos** os
+  métodos — os 5 de cunha e a Estabilidade Externa. Roda via
+  `_calcular_com_cache` (cache por método — ver `cache_resultados.py`
+  abaixo), atualiza esquema + painel de resultados, mostra o primeiro
+  `metodo.avisos(projeto)` na status bar (ou o resumo do resultado, se
+  não houver aviso). Não mexe no Quadro Resumo.
+- `_calcular(aba)`: wrapper fino de `_calcular_metodo` para um dos 5
+  métodos de cunha, pelo índice `aba` (0..4, mesmo índice do cache).
+- `_calcular_externa()`: idem, para `MetodoEstabilidadeExterna` — cache
+  num índice dedicado (`_IDX_EXT = 5`), fora do grupo exclusivo da navbar
+  (não é uma "aba" de cunha, é uma verificação à parte) e não mexe em
+  `_metodo_atual`.
+- `_selecionar_metodo(aba)`: troca de método de cunha na navbar —
+  recalcula (ou usa o cache) e mostra, **sem** registrar no Quadro Resumo.
+- `_mostrar_metodo(aba)`: o botão "Registrar no quadro" — recalcula/mostra
+  **e** registra uma situação (só para os 5 métodos de cunha; a
+  Estabilidade Externa entra no Quadro Resumo via `_comparar_metodos()`).
+- `_comparar_metodos()`: roda os 5 métodos de cunha **+ a Estabilidade
+  Externa** (6 ao todo) de uma vez, reaproveitando o cache do que já
+  estiver calculado, e registra tudo numa única coluna consolidada.
   Métodos fora da faixa de validade (`avisos()`) não são pulados — continuam
   rodando, só entram na lista "fora de faixa" da mensagem final.
 - `_atualizar_titulo()` / `_confirmar_descarte()`: alterações não salvas (usa
@@ -194,11 +207,13 @@ A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
 **qualquer** edição — não só geometria/sobrecarga, precisa cobrir tudo para o
 rastreamento de alterações não salvas funcionar direito. Também:
 
-- Marca "Solo de encosta", "Solo de fundação" e "Face" como reservadas
-  (sufixo "(estab. externa)" + aviso no topo da aba) — nenhum método
-  implementado hoje lê esses campos (`relevancia.ABAS_RESERVADAS`).
+- Marca "Face" como reservada (sufixo "(reservado)" + aviso no topo da aba)
+  — é a única aba que nenhum método implementado hoje lê
+  (`relevancia.ABAS_RESERVADAS`). "Solo de encosta" e "Solo de fundação"
+  eram reservadas antes da Estabilidade Externa; hoje são consumidas de
+  verdade (solo retido / atrito de base + capacidade de carga).
 - `destacar_metodo(sigla)`: pinta as abas relevantes para o método ativo
-  (`relevancia.abas_relevantes`) e atenua as demais.
+  (`relevancia.abas_relevantes`) e atenua as demais — inclui "Ext".
 
 `PainelResultados`: cartões de resultado (via `interpretacao.cartoes_resultado`,
 já com selos de julgamento), banner de avisos (`metodo.avisos(projeto)`) e os
@@ -224,13 +239,17 @@ a decisão completa), **Registrar no quadro** e **Hipóteses / figura**.
   ainda não alimentam nenhum cálculo.
 - `interpretacao.py`: `Cartao` (rótulo/valor/selo) e `cartoes_resultado(sigla,
   resultado, projeto, referencia)` — decide os selos ADEQUADO/INSUFICIENTE
-  (Bishop, FS vs. `projeto.reforco.fs_alvo`), OK/ALERTA (Geossintético,
-  dimensionamento fechou ou não), o cartão de ponto de aplicação (H/3) e a
-  comparação percentual com Rankine (Coulomb/Dois Blocos).
+  (Bishop, FS vs. `projeto.reforco.fs_alvo`; Estabilidade Externa, os três FS
+  vs. `MetodoEstabilidadeExterna.FS_ALVO_*` — os alvos não são duplicados
+  aqui, vêm direto da classe do método), OK/ALERTA (Geossintético,
+  dimensionamento fechou ou não; Estabilidade Externa, excentricidade vs.
+  B/6), o cartão de ponto de aplicação (H/3) e a comparação percentual com
+  Rankine (Coulomb/Dois Blocos).
 - `resumo_map.py`: `resultado_para_resumo(metodo_cls, resultado)` — o
   `Resultado` de um método vira o dict de chaves que `QuadroResumoWidget`
-  espera (`coulomb_solicit`, `bishop_fs`, `n_camadas`, etc.); preserva as
-  chaves da versão MDI original.
+  espera (`coulomb_solicit`, `bishop_fs`, `n_camadas`, `ext_fs_desl`/
+  `ext_fs_tomb`/`ext_fs_cap`, etc.); preserva as chaves da versão MDI
+  original.
 
 **Mexer aqui quando:**
 
@@ -253,7 +272,8 @@ a decisão completa), **Registrar no quadro** e **Hipóteses / figura**.
   sempre devolve uma instância nova. `MainWindow._dados_alterados` chama
   `invalidar()` a cada edição; `_calcular_com_cache` consulta antes de rodar
   `metodo.calcular` (Dois Blocos/Bishop otimizam e podem demorar — só em cache
-  miss é que mostram "Calculando..." + cursor de ocupado).
+  miss é que mostram "Calculando..." + cursor de ocupado). Índices 0-4 são os
+  métodos de cunha (`_METODOS_POR_ABA`), `_IDX_EXT=5` é a Estabilidade Externa.
 
 **Mexer aqui quando:**
 
@@ -270,6 +290,15 @@ método `valores()` que devolve a dataclass correspondente. São o que
 `panels.PainelDados` monta como as oito abas do painel de dados. `_AbaReforco`
 (Tult, RFcr, RFid, RFd, Ci, FS) é o exemplo real de "adicionar uma aba nova"
 que o cookbook da seção 5.2 descreve.
+
+`_AbaSolo.__init__` aceita `com_atrito_blocos: bool` (mostra ou não o spinbox
+de ângulo de atrito entre blocos) e, desde a Estabilidade Externa,
+`rotulo_atrito_blocos`/`default_atrito_blocos` — permitem reaproveitar o mesmo
+spinbox com outro rótulo/valor padrão. `panels.py` usa isso para a aba de solo
+de encosta: `com_atrito_blocos=True, rotulo_atrito_blocos="Atrito solo-muro do
+retido, δ_ret (graus)", default_atrito_blocos=0.0` — o campo vira `δ_ret`, não
+mais o atrito entre blocos, e alimenta `solo_encosta.angulo_atrito_blocos_g`
+que `MetodoEstabilidadeExterna` lê para o empuxo do solo retido.
 
 A classe `EntradaDadosDialog`, no mesmo arquivo, é resíduo da versão MDI (o
 diálogo modal de Entrada de Dados) — **não é mais instanciada em lugar
@@ -337,14 +366,16 @@ Cada aba mostra:
 
 #### `dialogs/quadro_resumo.py`
 
-A tabela do **Quadro Resumo**, com 23 linhas (situação, geometria, parâmetros
+A tabela do **Quadro Resumo**, com 27 linhas (situação, geometria, parâmetros
 do solo, sobrecargas, resultados de cada método — inclusive `"FS, Mét.
-Bishop"`) e até 8 colunas (últimas situações analisadas). É um `QWidget` com
-um `QTableWidget` dentro.
+Bishop"` e as três linhas de Estabilidade Externa, `ext_fs_desl`/
+`ext_fs_tomb`/`ext_fs_cap`) e até 8 colunas (últimas situações analisadas). É
+um `QWidget` com um `QTableWidget` dentro.
 
 O método `adicionar_situacao(projeto, resultados)` adiciona uma nova coluna
 (vem de `resumo_map.resultado_para_resumo`, um método por vez, ou já
-consolidado com os 5 métodos no caso de `MainWindow._comparar_metodos`);
+consolidado com os 6 métodos — 5 de cunha + Estabilidade Externa — no caso de
+`MainWindow._comparar_metodos`);
 quando completar 8, a mais antiga sai (rolamento FIFO). `limpar()` esvazia
 tudo (usado no "Novo").
 
@@ -365,10 +396,11 @@ tudo (usado no "Novo").
 | `casos_literatura.py` | **Fonte única de verdade** dos casos de validação: dataclass `CasoLiteratura` (id, método, fonte, entradas, esperado, tolerância) + `monta_projeto()` (aplica os overrides sobre um `Projeto()` default) + `METODOS` (mapa string→classe). Usado tanto pelos `test_*.py` quanto por `validar.py`. |
 | `casos_referencia_original.csv` | Conferência **opcional** com o programa original (PLANO_IMPLEMENTACAO.md §5). Mesmo schema de `CasoLiteratura`, achatado em CSV (`entradas_json`/`esperado_json`). Vazio por padrão (só cabeçalho); `validar.py` carrega automaticamente se tiver linhas, numa seção separada do relatório que não afeta a taxa de aprovação nem o código de saída. |
 | `test_models.py` | Smoke-test do core: `Projeto` default e round-trip de salvar/carregar JSON. |
-| `test_rankine.py`, `test_coulomb.py`, `test_dois_blocos.py`, `test_bishop.py`, `test_geossintetico.py` | Um arquivo por método, lendo os casos de `casos_literatura.py` (para Rankine/Coulomb, que têm fórmula fechada) ou com oráculos próprios — limites, monotonicidade, convergência — para os métodos sem fórmula fechada (Dois Blocos, Bishop). |
+| `test_rankine.py`, `test_coulomb.py`, `test_dois_blocos.py`, `test_bishop.py`, `test_geossintetico.py`, `test_estabilidade_externa.py` | Um arquivo por método, lendo os casos de `casos_literatura.py` (Rankine/Coulomb/Estabilidade Externa têm fórmula fechada) ou com oráculos próprios — limites, monotonicidade, convergência — para os métodos sem fórmula fechada (Dois Blocos, Bishop). `test_estabilidade_externa.py` cobre deslizamento/tombamento/capacidade de carga, os fatores de Vésic e a reutilização do `MetodoRankine` para o empuxo motor. |
 | `test_degeneracia.py` | Casos degenerados/limite de **todos** os métodos, num só lugar (ex.: Coulomb com θ=δ=i=0 tem que coincidir com Rankine). |
 | `test_validade.py` | `MetodoAnalise.avisos(projeto)` de cada método — presença/ausência de aviso por faixa de β, não o texto exato. |
 | `test_relevancia.py`, `test_interpretacao.py`, `test_resumo_map.py`, `test_estado_projeto.py`, `test_cache_resultados.py` | Lógica de `ui/*.py` que não depende de Qt (destaque de abas, selos/cartões de julgamento, mapeamento pro Quadro Resumo, alterações não salvas, cache de resultados) — mesmo padrão dos testes de `core/`: `Resultado`/`Projeto` construídos à mão, sem rodar `calcular()` nem abrir janela. |
+| `test_geometria_segura.py` | `ui/geometria_segura.py::cotg_segura` — divisão de tangente segura perto de singularidades (β/βe = 0°, 90°), usada por `esquema_widget.py` pra não estourar `ZeroDivisionError`. |
 
 Todos rodam **sem precisar de PySide6** — mesmo os de `ui/*.py` acima, que
 testam só os módulos sem Qt daquela camada (a suíte não abre nenhuma janela).
@@ -433,14 +465,28 @@ Usuário clica "Registrar no quadro" (ou "Comparar métodos")
     │
     ▼
 MainWindow._mostrar_metodo(0)                    OU     _comparar_metodos()
-    ├─ resultados = resumo_map.resultado_para_resumo(...)   [um método,       [cinco métodos,
-    ├─ _abrir_resumo()                                       via cache onde já calculado]
-    └─ quadro.adicionar_situacao(projeto, resultados)   # nova coluna no Quadro Resumo
+    ├─ resultados = resumo_map.resultado_para_resumo(...)   [um método      [6 métodos — 5 de
+    ├─ _abrir_resumo()                                       de cunha, via   cunha + Estabilidade
+    └─ quadro.adicionar_situacao(projeto, resultados)        cache onde já   Externa numa só
+                                                              calculado]      coluna consolidada]
+
+Usuário clica "Estabilidade externa" na navbar (act_ext)
+    │
+    ▼
+MainWindow._calcular_externa()
+    ├─ metodo = MetodoEstabilidadeExterna()
+    └─ _calcular_metodo(metodo, _IDX_EXT)   # mesmo caminho de cache/esquema/painel/log,
+                                             # mas fora do grupo exclusivo da navbar (não
+                                             # mexe em _metodo_atual) e sem "Registrar no
+                                             # quadro" — só _comparar_metodos regista a Ext
 ```
 
-Essa integração está feita para os 5 métodos (`_METODOS_POR_ABA` em
-`main_window.py`), inclusive Bishop (`bishop_fs`) e Geossintético
-(`n_camadas`) — ambos com linha própria no Quadro Resumo.
+Essa integração de "Registrar no quadro" está feita para os 5 métodos de
+cunha (`_METODOS_POR_ABA` em `main_window.py`), inclusive Bishop
+(`bishop_fs`) e Geossintético (`n_camadas`) — ambos com linha própria no
+Quadro Resumo. A Estabilidade Externa entra pelo caminho separado acima
+(`_calcular_externa`) e só ganha uma coluna no Quadro Resumo via "Comparar
+métodos" (`_comparar_metodos`), que já a inclui junto com os 5 de cunha.
 
 ---
 
@@ -583,6 +629,16 @@ A separação entre core e UI faz com que **o cálculo em si nunca exija mexer e
 código de outro método**; os passos 4–7 são só "plugar" o método novo nos
 módulos de UI que precisam saber que ele existe.
 
+Há um precedente real que foge um pouco do padrão acima:
+`MetodoEstabilidadeExterna` (`core/methods/estabilidade_externa.py`) reaproveita
+`MetodoRankine.calcular()` para o empuxo motor em vez de reimplementar Ka, e é
+o único método cujo construtor aceita um argumento (`fonte_phi_base="fundacao"
+| "aterro"` — de qual solo vem o φ da base do bloco). Por não ser um método de
+cunha, ele não entra em `_METODOS_POR_ABA`: tem sua própria `QAction`
+(`act_ext` → `MainWindow._calcular_externa`) fora do `grupo_metodos` exclusivo
+da navbar, e só ganha coluna no Quadro Resumo via `_comparar_metodos` — não
+tem "Registrar no quadro" individual (seção 4).
+
 ### 5.7 ...mudar o número de situações armazenadas no Quadro Resumo
 
 `dialogs/quadro_resumo.py`, constante `N_SITUACOES = 8` no topo do arquivo.
@@ -617,8 +673,12 @@ pytest tests/ -v                  # suíte pytest — rápida, um arquivo por m�
 python validar.py                 # runner de validação — gera RELATORIO_VALIDACAO.md
 ```
 
-Toda a suíte roda **sem precisar de PySide6** (só `core/` é testado), então funciona
-em CI mesmo sem ambiente gráfico.
+Toda a suíte roda **sem precisar de PySide6** — `core/` inteiro, mais os
+módulos de `ui/*.py` que não importam Qt (`relevancia.py`, `interpretacao.py`,
+`resumo_map.py`, `estado_projeto.py`, `cache_resultados.py`,
+`geometria_segura.py`) — então funciona em CI mesmo sem ambiente gráfico. Só os
+widgets (`main_window.py`, `panels.py`, `dialogs/*.py`) exigem Qt, e não têm
+teste automatizado hoje — a verificação deles é visual (rodar o app).
 
 `validar.py` é o "teste completo do programa": percorre `tests/casos_literatura.py`,
 calcula o erro relativo de cada caso, grava um log estruturado em
@@ -638,6 +698,7 @@ saída). No estado atual do projeto, ambos os comandos devem terminar 100% verde
 | Cálculo de Dois Blocos | `core/methods/dois_blocos.py` |
 | Cálculo de Bishop | `core/methods/bishop.py` |
 | Geossintéticos | `core/methods/geossintetico.py` |
+| Cálculo de Estabilidade Externa (deslizamento, tombamento, capacidade de carga/Vésic) | `core/methods/estabilidade_externa.py` |
 | Avisos de aplicabilidade de um método (faixa de β, etc.) | `core/methods/base.py` (`avisos`) + o método específico |
 | Campos do projeto (modelo de dados) | `core/models.py` |
 | Como salvar/abrir arquivos | `core/persistence.py` |
@@ -648,6 +709,7 @@ saída). No estado atual do projeto, ambos os comandos devem terminar 100% verde
 | Mapeamento Resultado → linhas do Quadro Resumo | `ui/resumo_map.py` |
 | "Há alterações não salvas?" (título com `*`, confirmar descarte) | `ui/estado_projeto.py` |
 | Cache de resultado por método | `ui/cache_resultados.py` |
+| Divisão segura de tangente perto de singularidades (β/βe = 0°, 90°) | `ui/geometria_segura.py` |
 | Classes `_Aba*` de entrada (campos de cada aba) | `ui/dialogs/entrada_dados.py` |
 | Desenho do muro e da superfície crítica (esquema ilustrativo) | `ui/dialogs/esquema_widget.py` |
 | Diálogo "Hipóteses / figura" dos métodos | `ui/dialogs/metodo_info.py` |

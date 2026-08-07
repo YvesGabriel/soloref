@@ -31,10 +31,11 @@ A **Parte III** ("Próximos passos") está reservada e será preenchida depois.
 2. Conceitos fundamentais
 3. Instalação e primeiros passos
 4. A interface em cinco minutos
-5. Entrada de dados (as sete abas)
+5. Entrada de dados (as oito abas)
 6. O exemplo condutor
 7. Os métodos de cálculo
    - 7.1 Rankine · 7.2 Coulomb · 7.3 Dois Blocos · 7.4 Bishop · 7.5 Geossintéticos
+     · 7.6 Estabilidade externa
 8. Quadro resumo e interpretação
 9. Salvar e abrir projetos
 10. Validação e confiabilidade
@@ -66,17 +67,20 @@ reimplementação, em stack moderna e multiplataforma (Python + PySide6), de um
 programa antigo escrito para Windows 16/32 bits que não roda mais nos sistemas
 atuais.
 
-Na prática, o programa responde a três perguntas de projeto: **qual o esforço que
-o solo retido impõe à estrutura** (empuxo de terra), **qual a segurança do maciço
-contra o escorregamento** (fator de segurança) e **quanto reforço é preciso** para
-atingir a segurança desejada. Para isso reúne quatro métodos clássicos de análise
-por cunha — Rankine, Coulomb, Dois Blocos e Bishop simplificado — mais um módulo
-de dimensionamento de reforço com geossintéticos.
+Na prática, o programa responde a quatro perguntas de projeto: **qual o esforço
+que o solo retido impõe à estrutura** (empuxo de terra), **qual a segurança do
+maciço contra o escorregamento** (fator de segurança), **quanto reforço é
+preciso** para atingir a segurança desejada, e **o maciço reforçado, tratado
+como um bloco, resiste a deslizar, tombar e afundar na fundação** (estabilidade
+externa). Para isso reúne quatro métodos clássicos de análise por cunha —
+Rankine, Coulomb, Dois Blocos e Bishop simplificado —, um módulo de
+dimensionamento de reforço com geossintéticos, e a verificação de estabilidade
+externa (seção 7.6).
 
-O programa cobre hoje a **estabilidade interna** da estrutura (o que acontece
-dentro do maciço reforçado). As verificações de **estabilidade externa**
-(deslizamento na base, tombamento e capacidade de carga da fundação) estão
-previstas para uma etapa futura, registrada na Parte III.
+O programa cobre tanto a **estabilidade interna** da estrutura (o que acontece
+dentro do maciço reforçado — os cinco métodos acima) quanto a **estabilidade
+externa** (deslizamento na base, tombamento e capacidade de carga da fundação
+— seção 7.6), que trata o maciço reforçado como um bloco rígido.
 
 ## 2. Conceitos fundamentais
 
@@ -106,9 +110,11 @@ FS = 1 significa colapso iminente; projetos de contenção costumam exigir FS en
 resistido pelo reforço; Bishop entrega diretamente o **FS** do talude.
 
 **Estabilidade interna × externa.** Estabilidade interna pergunta se o maciço
-reforçado não rompe por dentro (reforço insuficiente, arrancamento). Estabilidade
-externa trata o maciço como um bloco e pergunta se ele desliza, tomba ou afunda.
-O SoloRef, nesta versão, trata da interna.
+reforçado não rompe por dentro (reforço insuficiente, arrancamento) — os cinco
+métodos de cunha e o dimensionamento do reforço (seções 7.1–7.5). Estabilidade
+externa trata o maciço como um bloco rígido e pergunta se ele desliza, tomba ou
+afunda na fundação — o método **Estabilidade Externa** (seção 7.6). O SoloRef
+cobre as duas.
 
 ## 3. Instalação e primeiros passos
 
@@ -155,9 +161,9 @@ O fluxo típico é: entrar os dados (painel da esquerda, sempre visível), escol
 um método na navbar para ver o resultado no painel da direita, e **Registrar no
 quadro** quando quiser guardar aquela situação para comparar depois. Para
 comparar **todos** os métodos de uma vez — o propósito central do programa —
-use **Comparar métodos**: roda os cinco para o projeto atual e registra tudo
-numa única coluna do Quadro Resumo, sem precisar clicar método por método
-(seção 8).
+use **Comparar métodos**: roda os cinco métodos de cunha **e** a estabilidade
+externa (seção 7.6) para o projeto atual e registra tudo numa única coluna do
+Quadro Resumo, sem precisar clicar método por método (seção 8).
 
 Trocar para um método já calculado com os mesmos dados é instantâneo: o
 programa guarda o último resultado de cada método num cache e só recalcula se
@@ -180,12 +186,18 @@ navbar, as abas relevantes para ele ficam em destaque (azul, com uma dica
 "Usa: ..." ao passar o mouse) e as demais ficam atenuadas (cinza) — uma forma
 rápida de saber que campo vale a pena conferir antes de calcular.
 
-**Três abas são reservadas.** "Solo de encosta", "Solo de fundação" e "Face"
-levam o sufixo "(estab. externa)" no rótulo e mostram um aviso amarelo no
-topo: nenhum dos cinco métodos hoje implementados lê esses campos — eles
-estão reservados para a futura verificação de estabilidade externa
-(deslizamento, tombamento, capacidade de carga). Os campos continuam lá,
-editáveis e salvos no projeto, só não entram no cálculo ainda.
+**"Solo de encosta" e "Solo de fundação" alimentam a estabilidade externa.**
+Os cinco métodos de cunha (seções 7.1–7.5) não usam essas duas abas — mas a
+**Estabilidade externa** (seção 7.6) usa: "Solo de encosta" descreve o solo
+retido atrás do bloco (o empuxo motor), "Solo de fundação" descreve o solo de
+apoio (atrito de base e capacidade de carga). Por isso as duas ficam em
+destaque quando você seleciona Estabilidade externa na navbar, e atenuadas
+nos outros métodos — acompanhe a cor conforme muda de método.
+
+**"Face" continua reservada.** É a única aba que nenhum método implementado
+hoje lê — mostra um aviso amarelo no topo lembrando disso. Os campos
+continuam lá, editáveis e salvos no projeto, só não entram em cálculo
+nenhum ainda.
 
 Os parâmetros, agrupados por aba:
 
@@ -201,9 +213,10 @@ Os parâmetros, agrupados por aba:
 | | c | Coesão (kN/m²). |
 | | φ | Ângulo de atrito interno (°) — o parâmetro mais influente. |
 | | δ | Ângulo de atrito solo-muro (interface), usado por Coulomb e Dois Blocos. |
-| Solo de encosta *(estab. externa)* | γ, c, φ | Idem, para o solo da encosta a jusante. |
-| Solo de fundação *(estab. externa)* | γ, c, φ | Idem, para o solo de apoio. |
-| Face *(estab. externa)* | blocos | Se a face usa blocos, com altura/largura/recuo. |
+| Solo de encosta | γ, c, φ | Solo **retido** atrás do bloco — gera o empuxo motor da estabilidade externa. |
+| | δ_ret | Atrito solo-muro do retido (0° = padrão conservador; muros de solo reforçado costumam usar δ_ret=φ). |
+| Solo de fundação | γ, c, φ | Solo de **apoio** — atrito de base e capacidade de carga da estabilidade externa. |
+| Face *(reservado)* | blocos | Se a face usa blocos, com altura/largura/recuo — nenhum método usa ainda. |
 | Sobrecarga | q | Sobrecarga uniforme no topo (kN/m²). |
 | | P, x₀, e | Carga linear (trem-tipo), posição e eixo. |
 | Reforço | Tult | Resistência à tração última do geossintético (kN/m). |
@@ -447,27 +460,105 @@ finitos e positivos), ou vermelho **"ALERTA"** quando não fechou — o caso
 típico é um Tult baixo demais para o empuxo do muro (γ·H + q), que o programa
 já impede de virar um número sem sentido na tela.
 
+### 7.6 Estabilidade externa
+
+**A ideia.** Os cinco métodos anteriores olham para **dentro** do maciço
+reforçado. A estabilidade externa vira a pergunta do avesso: tratando o
+maciço reforçado inteiro como um **bloco rígido** de largura B e altura H, ele
+resiste a **deslizar** sobre a fundação, **tombar** em torno do pé, e a
+fundação resiste ao **peso** desse bloco sem romper? São os três modos de
+falha clássicos de qualquer estrutura de contenção — muro de gravidade,
+sapata, ou, aqui, o próprio maciço reforçado agindo como um bloco só. É o que
+dá função às abas **Solo de encosta** (o solo retido, que empurra o bloco) e
+**Solo de fundação** (o solo de apoio, que resiste por baixo) — antes
+reservadas, hoje efetivamente usadas por este método.
+
+**Equações-chave.** O empuxo motor vem do solo **retido** (aba Solo de
+encosta), pela mesma fórmula de Rankine (seção 7.1) — o programa reaproveita
+o cálculo, não duplica a fórmula. Ele pode atuar **inclinado** de δ_ret
+(atrito solo-muro do retido, configurável na própria aba Solo de encosta),
+gerando uma componente vertical que **alivia** a estrutura:
+
+```
+Ka = tan²(45° − φ_ret/2)
+Pah = ½·Ka·γ_ret·H²  +  Ka·q·H        componente horizontal do empuxo motor
+Pav = Pah · tan(δ_ret)                 componente vertical (δ_ret=0 é o padrão conservador)
+```
+
+Deslizamento (N = peso do bloco + sobrecarga; φ_base/c_base vêm, por padrão,
+do solo de fundação):
+```
+FS_deslizamento = [(N + Pav)·tan φ_base + c_base·B] / Pah        (alvo ≥ 1,5)
+```
+Tombamento em torno do pé, com a excentricidade e da resultante na base:
+```
+FS_tombamento = [N·(B/2) + Pav·B] / [Ea_solo·(H/3) + Ea_sob·(H/2)]     (alvo ≥ 2,0)
+e = B/2 − (M_estabilizante − M_tombador) / (N + Pav)                    (limite: e ≤ B/6)
+```
+Capacidade de carga da fundação (Vésic, largura efetiva de Meyerhof
+B' = B − 2e, fatores Nc/Nq/Nγ do solo de fundação):
+```
+q_ult = c_f·Nc + γ_f·D·Nq + ½·γ_f·B'·Nγ        (D = embutimento da fundação)
+FS_capacidade = q_ult / (N/B')                  (alvo ≥ 2,0)
+```
+O **FS global** da verificação é o mínimo entre os três.
+
+**Quando usar.** Sempre — é a verificação que fecha o dimensionamento. Os
+métodos de cunha e o reforço garantem que o maciço não rompe **por dentro**;
+a estabilidade externa garante que o conjunto, como bloco, não desliza, tomba
+nem afunda.
+
+**Como rodar.** Preencha a aba **Solo de encosta** (o solo retido atrás do
+bloco — δ_ret fica em 0° por padrão, conservador; para muros de solo
+reforçado é comum adotar δ_ret = φ_ret) e a aba **Solo de fundação** (o solo
+de apoio), depois clique em **Estabilidade externa** na navbar. Diferente dos
+cinco métodos de cunha, esta verificação não entra no grupo exclusivo de
+abas — é uma checagem à parte, que pode ser rodada em qualquer momento.
+
+**Resultado no exemplo.** Com o exemplo condutor (H=4, B=5, aterro γ=20/φ=30,
+fundação φ=30/c=15/γ=20, solo retido = mesmo φ=30, δ_ret=0, q=10): Pah =
+66,67 kN/m; **FS deslizamento = 5,02**; **FS tombamento = 11,51**;
+excentricidade e = 0,217 m (bem dentro do limite B/6 = 0,833 m); **FS
+capacidade de carga = 14,96**. Base larga (B=5 m) para um muro de 4 m — tudo
+folgado. Reduza B para 1 m (mantendo o resto) e os três FS despencam bem
+abaixo dos alvos — um bom experimento para sentir a sensibilidade da largura
+da base.
+
+**Selos ADEQUADO / INSUFICIENTE.** Cada um dos três cartões de FS carrega um
+selo: verde **"ADEQUADO"** quando o FS atinge o alvo (1,5 para deslizamento,
+2,0 para tombamento e capacidade de carga), vermelho **"INSUFICIENTE"**
+quando não atinge. Um quarto cartão mostra a **excentricidade** com selo
+**"OK"**/**"ALERTA"** contra o limite B/6 (fora dele, a resultante sai do
+núcleo central da base — tração, fora da faixa usual de projeto). No esquema
+ilustrativo, o bloco B×H aparece tracejado por cima do muro, com a seta do
+empuxo motor Eah a H/3 e a resultante N deslocada pela excentricidade.
+
 ## 8. Quadro resumo e interpretação
 
 O botão **Quadro Resumo** abre um painel acoplável (dock, na base da janela)
 com uma tabela que guarda as últimas situações analisadas (até oito colunas,
-em rolamento) com a geometria, os parâmetros do solo, as sobrecargas e os
-resultados de cada método — inclusive o **FS de Bishop** (linha "FS, Mét.
-Bishop") e o **número de camadas** do reforço, cada um na sua própria linha.
-É a ferramenta para **comparar cenários** — por exemplo, o mesmo muro com
+em rolamento) com a geometria (inclusive o **embutimento da fundação**), os
+parâmetros do solo, as sobrecargas e os resultados de cada método — inclusive
+o **FS de Bishop** (linha "FS, Mét. Bishop"), o **número de camadas** do
+reforço e os três FS da estabilidade externa ("FS deslizamento", "FS
+tombamento", "FS capacidade de carga"), cada um na sua própria linha. É a
+ferramenta para **comparar cenários** — por exemplo, o mesmo muro com
 φ = 28° e φ = 32°, ou com e sem sobrecarga — lado a lado.
 
 Há duas formas de preencher o quadro. **Registrar no quadro**, no painel de
 resultados, guarda só o método ativo naquele momento — é o fluxo de antes,
-método a método. **Comparar métodos**, na navbar, roda os **cinco métodos de
-uma vez** para o projeto atual e registra tudo numa **única coluna**
-consolidada — desde que essa é a razão de ser do programa (comparar Rankine,
-Coulomb, Dois Blocos, Bishop e o dimensionamento do reforço lado a lado), essa
-é a forma recomendada no dia a dia. Métodos fora da faixa de validade daquela
-geometria (ex.: Bishop numa parede vertical) não são pulados — continuam
-rodando e entrando na coluna, só ficam listados como "fora de faixa" na barra
-de status ao final, para você saber que aquele número deve ser lido com
-ressalva (ver os avisos de cada método na seção 7).
+método a método (para a estabilidade externa, esse botão específico ainda
+registra o último método de cunha selecionado, não a estabilidade externa —
+use Comparar métodos para incluí-la). **Comparar métodos**, na navbar, roda
+os **cinco métodos de cunha e a estabilidade externa, de uma vez** (seis ao
+todo) para o projeto atual e registra tudo numa **única coluna** consolidada
+— desde que essa é a razão de ser do programa (comparar Rankine, Coulomb,
+Dois Blocos, Bishop, o dimensionamento do reforço e a estabilidade externa
+lado a lado), essa é a forma recomendada no dia a dia. Métodos fora da faixa
+de validade daquela geometria (ex.: Bishop numa parede vertical) não são
+pulados — continuam rodando e entrando na coluna, só ficam listados como
+"fora de faixa" na barra de status ao final, para você saber que aquele
+número deve ser lido com ressalva (ver os avisos de cada método na seção 7).
 
 ## 9. Salvar e abrir projetos
 
@@ -543,6 +634,7 @@ SoloRef/
 │   │   └── methods/        um arquivo por método
 │   │       ├── base.py     MetodoAnalise (abstrata) + Resultado + avisos()
 │   │       ├── rankine.py  coulomb.py  dois_blocos.py  bishop.py  geossintetico.py
+│   │       └── estabilidade_externa.py   bloco rígido: deslizamento/tombamento/capacidade
 │   └── ui/
 │       ├── main_window.py       janela única (3 painéis), navbar, cálculo, log
 │       ├── panels.py             PainelDados (abas) e PainelResultados (cartões)
@@ -551,6 +643,7 @@ SoloRef/
 │       ├── resumo_map.py         Resultado -> linhas do Quadro Resumo (sem Qt)
 │       ├── estado_projeto.py     "há alterações não salvas?" (sem Qt)
 │       ├── cache_resultados.py   cache de Resultado por método (sem Qt)
+│       ├── geometria_segura.py   divisão segura por tangente p/ o esquema (sem Qt)
 │       └── dialogs/              esquema_widget, metodo_info, quadro_resumo,
 │                                  entrada_dados (abas reaproveitadas por panels.py)
 ├── tests/
@@ -593,6 +686,11 @@ a UI o preenche, os métodos o consomem, a persistência o serializa. Os nomes d
 campos trazem a unidade embutida (por exemplo `peso_especifico_kN_m3`,
 `angulo_atrito_g`) para evitar ambiguidade e ficar perto da notação da literatura.
 
+`Geometria.embutimento_m` (default `0.0`) é o D usado pela estabilidade externa
+(capacidade de carga) — existe no modelo e na persistência desde já, mas ainda
+não tem um campo próprio na aba Geometria da UI (só é lido, com o default, até
+esse campo ser exposto).
+
 ## 15. Padrão dos métodos de cálculo
 
 Todo método herda de `MetodoAnalise` (em `methods/base.py`), que define o contrato
@@ -619,6 +717,15 @@ registra-se a classe. Os métodos sem fórmula fechada (Dois Blocos, Bishop) seg
 internamente a mesma estrutura: uma função que avalia uma geometria tentativa e
 uma função de busca (grade grosseira + refino com SciPy) que encontra a crítica.
 
+`MetodoEstabilidadeExterna` (seção 7.6) é uma exceção pontual ao "sem
+argumentos no construtor": aceita `fonte_phi_base` (`"fundacao"`, padrão, ou
+`"aterro"`) para escolher de qual solo vem o atrito de base no cálculo do
+deslizamento — necessário porque o benchmark de literatura (Wesley) usa o φ
+do próprio maciço reforçado, não o da fundação. Fora isso, o método segue o
+padrão normalmente, e ainda **reaproveita `MetodoRankine.calcular()`**
+internamente para o empuxo do solo retido — mesma fonte de verdade do Ka,
+sem duplicar a fórmula.
+
 Sobre a escolha metodológica do reforço (seção 7.5): adotou-se a linha
 **FHWA/AASHTO "Simplified Method"** por ser a mais documentada, determinística
 (logo, testável) e padrão de projeto de muros de solo reforçado; a implementação
@@ -637,30 +744,37 @@ serializados automaticamente, sem alterar a persistência.
 ## 17. Testes e validação automática
 
 Há duas camadas complementares de verificação. A primeira é o **pytest**
-(`tests/test_*.py`): um arquivo por método, mais testes de modelos e de casos
-degenerados, cada um comparando a saída contra valores conhecidos dentro de uma
-tolerância. A segunda é o **runner** `validar.py`, que lê o dataset único
-(`tests/casos_literatura.py`), roda cada caso, calcula o erro relativo, grava um
-log com timestamp e gera o `RELATORIO_VALIDACAO.md`. O runner sai com código de
-erro se algum caso falhar, o que o torna adequado para integração contínua.
+(`tests/test_*.py`): um arquivo por método (inclusive `test_estabilidade_externa.py`),
+mais testes de modelos e de casos degenerados, cada um comparando a saída contra
+valores conhecidos dentro de uma tolerância. A segunda é o **runner** `validar.py`,
+que lê o dataset único (`tests/casos_literatura.py`), roda cada caso, calcula o
+erro relativo, grava um log com timestamp e gera o `RELATORIO_VALIDACAO.md`. O
+runner sai com código de erro se algum caso falhar, o que o torna adequado para
+integração contínua. Cada `CasoLiteratura` pode opcionalmente trazer
+`metodo_kwargs` (dict, vazio por padrão) para instanciar o método com argumentos
+não triviais — hoje só usado pelo caso EXT-REF-01, que precisa de
+`fonte_phi_base="aterro"`.
 
 A mesma regra de "sem Qt, então testável sem abrir janela" vale para a lógica
 de interface que não é desenho puro: `test_relevancia.py`, `test_interpretacao.py`,
-`test_resumo_map.py`, `test_estado_projeto.py` e `test_cache_resultados.py`
-cobrem, respectivamente, o mapa de abas relevantes por método, os selos de
-julgamento (ADEQUADO/INSUFICIENTE, OK/ALERTA), o mapeamento para o Quadro
-Resumo, o rastreamento de alterações não salvas e o cache de resultados —
-`test_validade.py` cobre os `avisos()` de cada método. Só o desenho do
-esquema (`esquema_widget.py`) e a montagem dos widgets em si ficam fora do
-pytest, por dependerem de Qt; esses foram conferidos manualmente, rodando o
-app e tirando screenshot do esquema de cada método (seção 4).
+`test_resumo_map.py`, `test_estado_projeto.py`, `test_cache_resultados.py` e
+`test_geometria_segura.py` cobrem, respectivamente, o mapa de abas relevantes
+por método, os selos de julgamento (ADEQUADO/INSUFICIENTE, OK/ALERTA), o
+mapeamento para o Quadro Resumo, o rastreamento de alterações não salvas, o
+cache de resultados e a divisão segura por tangente do esquema — `test_validade.py`
+cobre os `avisos()` de cada método. Só o desenho do esquema (`esquema_widget.py`)
+e a montagem dos widgets em si ficam fora do pytest, por dependerem de Qt; esses
+foram conferidos manualmente, rodando o app e tirando screenshot do esquema de
+cada método (seção 4).
 
 O gabarito é **a literatura**: fórmulas fechadas (Rankine, Coulomb), casos-limite
 auto-verificáveis (Coulomb que degenera em Rankine; talude infinito de Bishop com
-FS → tan φ/tan β; consistência ΣTmax = Ea do reforço) e, opcionalmente, a
-conferência com o programa original — para a qual existe o arquivo
-`casos_referencia_original.csv` (hoje vazio), alimentado sob demanda sem que os
-testes principais dependam dele.
+FS → tan φ/tan β; consistência ΣTmax = Ea do reforço; exemplo condutor da
+estabilidade externa, caso EXT-01), um benchmark de literatura para ela
+(EXT-REF-01, Wesley 2009 — Pah, Pav, FS de deslizamento e tombamento, com
+empuxo inclinado δ_ret=φ_ret) e, opcionalmente, a conferência com o programa
+original — para a qual existe o arquivo `casos_referencia_original.csv` (hoje
+vazio), alimentado sob demanda sem que os testes principais dependam dele.
 
 ## 18. Como estender o programa
 
