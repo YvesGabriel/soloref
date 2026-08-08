@@ -1,0 +1,22 @@
+Fala Yves,
+
+Aqui vai a correção do seu artigo. Está muito bom! Parabéns! São apenas alguns poucos comentários.
+
+Na verdade, precisa melhorar bastante...
+
+Comentários específicos no pdf em anexo. Peço para baixar e abrir em um leitor local de pdf, como o evince ou o Acrobat Reader. Muitas vezes, quando abre direto no navegador, não aparecem todos os comentários.
+
+Comentários gerais:
+- Adicionar o meu nome e do Prof. Lenz. Incluir o meu nome como "Marcos R. O. A. Maximo".
+- Adicionar no título: ... no Contexto do Projeto ITAndroids Small Size.
+- Destacar qual é a contribuição do trabalho explicitamente ("A contribuição deste trabalho é ..." ou "Este trabalho contribui através de ...") no Abstract e na Introdução (no último parágrafo).
+- Precisa especificar o que você quer dizer por intereferência. Um texto científico precisa ser bem preciso.
+- Na Introdução, é importante fazer uma coisa chamada de "Revisão de Literatura", em que você comenta sobre trabalhos semelhantes aos seus. Basicamente, pega uns 3-4 trabalhos semelhantes e escreve 1-2 parágrafos comentando um pouco sobre estes trabalhos (e colocando referências).
+- No artigo em si, não faz muito sentido você ficar falando que meteu gagá, todo mundo sabe disso. Faz sentido apenas dizer qual literatura você realmente se baseou para implementar o seu projeto.
+- ISTO É UM TEXTO CIENTÍFICO. NÃO FICAR USANDO PALAVRAS DE FORMA VAGA.
+- No final da seção de Conclusões, a gente coloca uma lista de Trabalhos Futuros. Estes trabalhos futuros não precisa ser algo que você mesmo vai fazer, pode ser algo que você recomenda para ser feito pela ITAndroids em trabalhos futuros. Coloca umas 3-4 sugestões de trabalhos futuros ligadas ao seu trabalho.
+
+
+Em sex., 2 de ago. de 2024 às 23:18, Yves Gabriel Queiroz de Sousa <yves.sousa.8821@ga.ita.br> escreveu:
+Boa noite, professor
+Segue o artigo da Iniciação Científica. Abraços!
