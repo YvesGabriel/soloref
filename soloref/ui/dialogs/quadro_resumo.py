@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QTableWidget, QTableWidgetItem, QHeaderView, QVBoxLayout, QLabel
+    QWidget, QTableWidget, QTableWidgetItem, QHeaderView, QVBoxLayout, QLabel,
+    QPushButton, QHBoxLayout,
 )
 
 from ...core.models import Projeto
@@ -79,8 +80,21 @@ class QuadroResumoWidget(QWidget):
             item.setFlags(Qt.ItemIsEnabled)
             self.tabela.setItem(r, 0, item)
 
+        # Barra de ações: apagar situações registradas.
+        self.btn_remover = QPushButton("Remover última")
+        self.btn_remover.setToolTip("Apaga a última situação registrada no quadro")
+        self.btn_remover.clicked.connect(self.remover_ultima)
+        self.btn_limpar = QPushButton("Limpar tudo")
+        self.btn_limpar.setToolTip("Apaga todas as situações do quadro")
+        self.btn_limpar.clicked.connect(self.limpar)
+        barra = QHBoxLayout()
+        barra.addStretch()
+        barra.addWidget(self.btn_remover)
+        barra.addWidget(self.btn_limpar)
+
         lay = QVBoxLayout(self)
         lay.addWidget(titulo)
+        lay.addLayout(barra)
         lay.addWidget(self.tabela)
 
         self.situacoes: list[dict] = []
@@ -100,8 +114,22 @@ class QuadroResumoWidget(QWidget):
         self._repreencher()
 
     def limpar(self) -> None:
-        """Esvazia todas as situações e as células de resultado (menu Novo)."""
+        """Esvazia todas as situações e as células de resultado (menu Novo /
+        botão 'Limpar tudo')."""
         self.situacoes = []
+        self._limpar_celulas()
+
+    def remover_ultima(self) -> None:
+        """Remove apenas a última situação registrada e redesenha o quadro."""
+        if not self.situacoes:
+            return
+        self.situacoes.pop()
+        self._limpar_celulas()
+        self._repreencher()
+
+    def _limpar_celulas(self) -> None:
+        """Esvazia as células de resultado (colunas 1..N), preservando os
+        rótulos das linhas na coluna 0."""
         for r in range(len(LINHAS)):
             for c in range(1, N_SITUACOES + 1):
                 self.tabela.setItem(r, c, QTableWidgetItem(""))

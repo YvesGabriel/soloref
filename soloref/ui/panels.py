@@ -18,7 +18,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QTabWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
-    QLabel, QPushButton, QPlainTextEdit, QFrame,
+    QLabel, QPushButton, QPlainTextEdit, QFrame, QMessageBox,
 )
 
 from . import interpretacao, relevancia
@@ -62,6 +62,91 @@ def _marcar_reservada(widget: QWidget) -> None:
         lay.insertRow(0, aviso)
     else:
         lay.insertWidget(0, aviso)
+
+
+# --------------------------------------------------------------------------- #
+# Ajuda por aba (botão "?") — o que a aba faz e o que cada variável significa,
+# indicando quais métodos usam cada parâmetro.
+# --------------------------------------------------------------------------- #
+_AJUDA = {
+    "Geometria": (
+        "Define a forma da estrutura.\n"
+        "• H — altura da parte reforçada (m).\n"
+        "• β — inclinação da face, medida da horizontal (90° = vertical). Nos "
+        "métodos de cunha plana (Coulomb, Rankine, Dois Blocos) vale para 70°–90°; "
+        "no Bishop, β é usado como o ângulo do talude.\n"
+        "• B — largura da base do maciço (usada na Estabilidade externa).\n"
+        "• βe — inclinação da encosta a jusante.\n"
+        "• i — inclinação do talude no topo do muro.\n"
+        "• Ht — altura do talude de topo.\n"
+        "• Embutimento — profundidade da base na fundação (capacidade de carga)."
+    ),
+    "Solo de aterro": (
+        "Solo do maciço reforçado (o que empurra a estrutura).\n"
+        "• γ — peso específico (kN/m³).\n"
+        "• c — coesão (kN/m²).\n"
+        "• φ — ângulo de atrito interno (°); o parâmetro mais influente.\n"
+        "• δ — atrito solo-muro; usado SÓ por Coulomb e Dois Blocos "
+        "(Rankine e Bishop ignoram).\n"
+        "Usado por todos os métodos de empuxo, pelo dimensionamento com "
+        "geossintéticos e pelo peso do bloco na Estabilidade externa."
+    ),
+    "Solo de encosta": (
+        "Solo retido atrás do maciço reforçado.\n"
+        "Usado SÓ pela Estabilidade externa, para gerar o empuxo motor.\n"
+        "• γ, c, φ — parâmetros do solo retido.\n"
+        "• δ_ret — atrito solo-muro do retido: 0 é o padrão conservador; muros de "
+        "solo reforçado costumam adotar δ_ret = φ.\n"
+        "Os métodos internos (cunha plana e Bishop) ignoram esta aba."
+    ),
+    "Solo de fundação": (
+        "Solo de apoio da base da estrutura.\n"
+        "Usado SÓ pela Estabilidade externa:\n"
+        "• φ e c — resistência ao deslizamento na base.\n"
+        "• c, φ, γ — capacidade de carga da fundação (fatores de Vésic).\n"
+        "Os métodos internos ignoram esta aba."
+    ),
+    "Face": (
+        "Blocos de face (altura, largura, recuo).\n"
+        "RESERVADO — estes campos ainda não entram em nenhum cálculo "
+        "implementado; os blocos não são considerados elementos de contenção."
+    ),
+    "Sobrecarga": (
+        "Cargas aplicadas no topo do aterro.\n"
+        "• q — sobrecarga uniforme (kN/m²); usada por Rankine, Coulomb, Dois "
+        "Blocos, geossintéticos e Estabilidade externa.\n"
+        "• Trem-tipo (P, xo, e) — carga linear; reservado no cálculo atual "
+        "(aparece no desenho, mas ainda não entra nas contas)."
+    ),
+    "Reforço": (
+        "Parâmetros do geossintético — usados SÓ pelo método Reforço.\n"
+        "• Tult — resistência à tração última (kN/m), da ficha do produto.\n"
+        "• RFcr, RFid, RFd — fatores de redução por fluência, dano de instalação "
+        "e degradação (transformam Tult na tração admissível de longo prazo).\n"
+        "• Ci — coeficiente de interação solo-reforço (arrancamento).\n"
+        "• FS — fator de segurança de projeto (espaçamento e ancoragem)."
+    ),
+    "Identificação": (
+        "Identificação do projeto (nome, empresa, número do dimensionamento).\n"
+        "Não afeta nenhum cálculo — é só para o relatório/registro."
+    ),
+}
+
+
+def _adicionar_ajuda(widget: QWidget, titulo: str, texto: str) -> None:
+    """Insere um botão '?' no topo da aba que abre um diálogo com a descrição
+    da aba e de cada variável (indicando quais métodos usam cada parâmetro)."""
+    btn = QPushButton("?  O que é esta aba")
+    btn.setMaximumWidth(150)
+    btn.setToolTip("Explica a aba e o significado de cada campo")
+    btn.clicked.connect(
+        lambda: QMessageBox.information(btn, f"Ajuda — {titulo}", texto)
+    )
+    lay = widget.layout()
+    if isinstance(lay, QFormLayout):
+        lay.insertRow(0, btn)
+    else:
+        lay.insertWidget(0, btn)
 
 
 # --------------------------------------------------------------------------- #
@@ -112,6 +197,19 @@ class PainelDados(QWidget):
             self.tabs.addTab(widget, rotulo)
 
         _marcar_reservada(self.aba_face)
+
+        # Botão "?" de ajuda no topo de cada aba (ver _AJUDA).
+        for w, tit in (
+            (self.aba_geometria, "Geometria"),
+            (self.aba_aterro, "Solo de aterro"),
+            (self.aba_encosta, "Solo de encosta"),
+            (self.aba_fundacao, "Solo de fundação"),
+            (self.aba_face, "Face"),
+            (self.aba_sobrecarga, "Sobrecarga"),
+            (self.aba_reforco, "Reforço"),
+            (self.aba_identif, "Identificação"),
+        ):
+            _adicionar_ajuda(w, tit, _AJUDA[tit])
 
         self._ligar_live_update()
         self.destacar_metodo(None)

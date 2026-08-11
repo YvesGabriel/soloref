@@ -560,6 +560,13 @@ pulados — continuam rodando e entrando na coluna, só ficam listados como
 "fora de faixa" na barra de status ao final, para você saber que aquele
 número deve ser lido com ressalva (ver os avisos de cada método na seção 7).
 
+**Apagar situações.** O painel do Quadro Resumo tem dois botões para desfazer
+registros: **Remover última** apaga apenas a última coluna registrada (útil
+quando você comparou algo por engano) e **Limpar tudo** esvazia todo o quadro.
+O quadro também é zerado automaticamente ao criar um **Novo** projeto. Como o
+quadro guarda no máximo oito situações em rolamento (FIFO), esses botões dão o
+controle manual para apagar antes de o limite ser atingido.
+
 ## 9. Salvar e abrir projetos
 
 Em **Sistema > Salvar como…** o projeto é gravado em um arquivo **JSON** legível —

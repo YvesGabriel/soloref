@@ -141,7 +141,7 @@ class _AbaFace(QWidget):
 class _AbaSolo(QWidget):
     def __init__(self, solo: Solo, *, com_atrito_blocos: bool,
                  observacoes: str | None = None,
-                 rotulo_atrito_blocos: str = "Ângulo de atrito entre blocos (graus)",
+                 rotulo_atrito_blocos: str = "Ângulo de atrito entre blocos, δ (graus)",
                  default_atrito_blocos: float = 30.0):
         super().__init__()
         self.peso = _spin(solo.peso_especifico_kN_m3)
@@ -150,9 +150,9 @@ class _AbaSolo(QWidget):
         self.atrito_blocos = None
 
         form = QFormLayout(self)
-        form.addRow("Peso específico aparente total (kN/m³)", self.peso)
-        form.addRow("Coesão (kN/m²)", self.coesao)
-        form.addRow("Ângulo de atrito (graus)", self.atrito)
+        form.addRow("Peso específico aparente total, γ (kN/m³)", self.peso)
+        form.addRow("Coesão, c (kN/m²)", self.coesao)
+        form.addRow("Ângulo de atrito, φ (graus)", self.atrito)
         if com_atrito_blocos:
             v = (solo.angulo_atrito_blocos_g if solo.angulo_atrito_blocos_g is not None
                  else default_atrito_blocos)
@@ -164,10 +164,6 @@ class _AbaSolo(QWidget):
             obs.setStyleSheet("color: #b00;")
             obs.setWordWrap(True)
             form.addRow(obs)
-
-        disc = QLabel("-> Discussão sobre parâmetros do solo")
-        disc.setStyleSheet("color: #b00; text-decoration: underline;")
-        form.addRow(disc)
 
     def valores(self) -> Solo:
         return Solo(
