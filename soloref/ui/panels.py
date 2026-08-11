@@ -134,19 +134,23 @@ _AJUDA = {
 
 
 def _adicionar_ajuda(widget: QWidget, titulo: str, texto: str) -> None:
-    """Insere um botão '?' no topo da aba que abre um diálogo com a descrição
-    da aba e de cada variável (indicando quais métodos usam cada parâmetro)."""
-    btn = QPushButton("?  O que é esta aba")
-    btn.setMaximumWidth(150)
+    """Insere um botão '?' fixado no canto superior direito da aba, que abre
+    um diálogo com a descrição da aba e de cada variável (indicando quais
+    métodos usam cada parâmetro)."""
+    btn = QPushButton("?")
+    btn.setFixedWidth(28)
     btn.setToolTip("Explica a aba e o significado de cada campo")
     btn.clicked.connect(
         lambda: QMessageBox.information(btn, f"Ajuda — {titulo}", texto)
     )
+    linha = QHBoxLayout()
+    linha.addStretch()
+    linha.addWidget(btn)
     lay = widget.layout()
     if isinstance(lay, QFormLayout):
-        lay.insertRow(0, btn)
+        lay.insertRow(0, linha)
     else:
-        lay.insertWidget(0, btn)
+        lay.insertLayout(0, linha)
 
 
 # --------------------------------------------------------------------------- #
