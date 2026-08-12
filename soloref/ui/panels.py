@@ -88,7 +88,8 @@ _AJUDA = {
     "Sobrecarga": (
         "Cargas aplicadas no topo do aterro.\n"
         "• q — sobrecarga uniforme (kN/m²); usada por Rankine, Coulomb, Dois "
-        "Blocos, geossintéticos e Estabilidade externa.\n"
+        "Blocos, Bishop (soma ao peso das fatias no topo do talude), "
+        "geossintéticos e Estabilidade externa.\n"
         "• Trem-tipo (P, xo, e) — carga linear; reservado no cálculo atual "
         "(aparece no desenho, mas ainda não entra nas contas)."
     ),

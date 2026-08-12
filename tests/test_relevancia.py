@@ -32,8 +32,13 @@ def test_dois_blocos_igual_coulomb():
             == relevancia.campos_relevantes("Coul", relevancia.ABA_ATERRO))
 
 
-def test_bishop_nao_usa_sobrecarga():
-    assert relevancia.ABA_SOBRECARGA not in relevancia.abas_relevantes("Bish")
+def test_bishop_usa_sobrecarga():
+    # bishop.py soma q ao peso das fatias no topo do talude — FS muda com q
+    # (ex.: exemplo complementar do manual, H=5/β=30/γ=19/φ=25/c=10, cai de
+    # 1,95 com q=0 para 1,04 com q=100 kN/m²). A aba precisa ficar destacada
+    # quando Bishop está ativo, senão parece que q é ignorado.
+    assert relevancia.ABA_SOBRECARGA in relevancia.abas_relevantes("Bish")
+    assert "q" in relevancia.campos_relevantes("Bish", relevancia.ABA_SOBRECARGA)
 
 
 def test_geossintetico_usa_reforco():

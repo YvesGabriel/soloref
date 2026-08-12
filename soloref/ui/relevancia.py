@@ -47,6 +47,7 @@ _RELEVANCIA: dict[str, dict[str, tuple[str, ...]]] = {
     "Bish": {
         ABA_GEOMETRIA: ("H", "β"),
         ABA_ATERRO: ("γ", "φ", "c"),
+        ABA_SOBRECARGA: ("q",),
     },
     "Ref": {
         ABA_GEOMETRIA: ("H",),

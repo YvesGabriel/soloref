@@ -217,7 +217,7 @@ Os parâmetros, agrupados por aba:
 | | δ_ret | Atrito solo-muro do retido (0° = padrão conservador; muros de solo reforçado costumam usar δ_ret=φ). |
 | Solo de fundação | γ, c, φ | Solo de **apoio** — atrito de base e capacidade de carga da estabilidade externa. |
 | Face *(reservado)* | blocos | Se a face usa blocos, com altura/largura/recuo — nenhum método usa ainda. |
-| Sobrecarga | q | Sobrecarga uniforme no topo (kN/m²). |
+| Sobrecarga | q | Sobrecarga uniforme no topo (kN/m²); soma ao peso das fatias do Bishop (seção 7.4), além de Rankine, Coulomb, Dois Blocos, geossintéticos e Estabilidade externa. |
 | | P, x₀, e | Carga linear (trem-tipo), posição e eixo. |
 | Reforço | Tult | Resistência à tração última do geossintético (kN/m). |
 | | RFcr, RFid, RFd | Fatores de redução — fluência, dano de instalação, degradação. |
@@ -381,6 +381,13 @@ FS = Σ[ (c'·bᵢ + Wᵢ·tan φ') / mα(i) ] / Σ[ Wᵢ · sen αᵢ ]
 O FS aparece nos dois lados (dentro de mα), então a equação é resolvida por
 **iteração** até convergir. Em seguida o programa **procura o círculo crítico** —
 o de menor FS — varrendo posições de centro e raio.
+
+O peso Wᵢ de cada fatia inclui a **sobrecarga** q (aba Sobrecarga, seção 5)
+quando a fatia está sob o trecho horizontal de topo — o programa soma q×bᵢ ao
+peso próprio da fatia antes de entrar na equação acima. Na prática o FS cai
+conforme q sobe (no exemplo complementar abaixo, de **1,95** com q=0 para
+**1,04** com q=100 kN/m²) — a aba Sobrecarga fica destacada quando Bishop
+está ativo, junto com Geometria e Solo de aterro.
 
 **Quando usar.** Faces abatidas (β < 70°), taludes, verificação global de
 estabilidade. Não faz sentido para uma parede perfeitamente vertical, onde a cunha
