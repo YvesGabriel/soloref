@@ -553,10 +553,9 @@ ferramenta para **comparar cenários** — por exemplo, o mesmo muro com
 φ = 28° e φ = 32°, ou com e sem sobrecarga — lado a lado.
 
 Há duas formas de preencher o quadro. **Registrar no quadro**, no painel de
-resultados, guarda só o método ativo naquele momento — é o fluxo de antes,
-método a método (para a estabilidade externa, esse botão específico ainda
-registra o último método de cunha selecionado, não a estabilidade externa —
-use Comparar métodos para incluí-la). **Comparar métodos**, na navbar, roda
+resultados, guarda só a análise ativa naquele momento — método de cunha ou
+Estabilidade externa, o que estiver na tela — é o fluxo de antes, um a um.
+**Comparar métodos**, na navbar, roda
 os **cinco métodos de cunha e a estabilidade externa, de uma vez** (seis ao
 todo) para o projeto atual e registra tudo numa **única coluna** consolidada
 — desde que essa é a razão de ser do programa (comparar Rankine, Coulomb,

@@ -59,6 +59,11 @@ _IDX_RANKINE = 1
 # à parte, mas ainda se beneficia do mesmo cache por método).
 _IDX_EXT = 5
 
+# Marcador de `_analise_atual` quando a análise exibida no painel de
+# resultados é a Estabilidade Externa, não um dos 5 métodos de cunha
+# (que usam o próprio índice inteiro 0..4 como marcador).
+_ANALISE_EXT = "ext"
+
 # Siglas dos métodos que rodam otimização (scipy) e podem demorar o
 # bastante para justificar cursor de ocupado + mensagem na status bar.
 _METODOS_PESADOS = ("DB", "Bish")
@@ -79,6 +84,14 @@ class MainWindow(QMainWindow):
         # e _confirmar_descarte.
         self._projeto_salvo: Projeto = self.projeto
         self._metodo_atual = 1  # começa em Rankine (instantâneo)
+        # Análise exibida agora no painel de resultados: um índice 0..4 (um
+        # dos 5 métodos de cunha) ou `_ANALISE_EXT` (Estabilidade Externa).
+        # É o que os botões "Calcular"/"Registrar no quadro" do
+        # PainelResultados usam para saber o que recalcular/registrar —
+        # diferente de `_metodo_atual`, que só rastreia o último método de
+        # CUNHA selecionado (usado pelo diálogo de Hipóteses, que não tem
+        # aba para a Estabilidade Externa).
+        self._analise_atual: int | str = self._metodo_atual
         # Cache de Resultado por método (índice), válido enquanto o
         # Projeto não mudar — trocar de aba entre métodos já calculados
         # com os mesmos dados fica instantâneo (Dois Blocos/Bishop
@@ -116,12 +129,8 @@ class MainWindow(QMainWindow):
         ebl.addWidget(self.esquema)
 
         self.painel_resultados = PainelResultados()
-        self.painel_resultados.calcularSolicitado.connect(
-            lambda: self._calcular(self._metodo_atual)
-        )
-        self.painel_resultados.registrarSolicitado.connect(
-            lambda: self._mostrar_metodo(self._metodo_atual)
-        )
+        self.painel_resultados.calcularSolicitado.connect(self._recalcular_atual)
+        self.painel_resultados.registrarSolicitado.connect(self._registrar_atual)
         self.painel_resultados.verHipoteses.connect(self._ver_hipoteses)
 
         self.splitter.addWidget(self.painel_dados)
@@ -395,26 +404,30 @@ class MainWindow(QMainWindow):
         """Estabilidade externa: mesmo caminho dos 5 métodos de cunha
         (cache, esquema, painel, log) via `_calcular_metodo`, mas fora do
         grupo exclusivo da navbar — é uma verificação à parte, não uma
-        "aba" de cunha, então não mexe em `_metodo_atual`. O botão
-        "Registrar no quadro" do painel de resultados continua ligado ao
-        último método de cunha selecionado (`_metodo_atual`), não a este
-        — juntar os dois no Quadro Resumo é trabalho da próxima tarefa
-        (Comparar métodos já vai incluir a estabilidade externa lá).
+        "aba" de cunha, então não mexe em `_metodo_atual` (usado só pelo
+        diálogo de Hipóteses, que não tem aba para ela). Marca
+        `_analise_atual` como a Estabilidade Externa, para que os botões
+        "Calcular"/"Registrar no quadro" do painel de resultados passem a
+        agir sobre ela em vez de "voltar" para o último método de cunha.
         """
+        self._analise_atual = _ANALISE_EXT
         metodo = MetodoEstabilidadeExterna()
         return self._calcular_metodo(metodo, _IDX_EXT)
 
     def _selecionar_metodo(self, aba: int):
         """Troca de método na navbar: recalcula e mostra, sem registrar."""
         self._metodo_atual = aba
+        self._analise_atual = aba
         self._metodo_actions[aba].setChecked(True)
         self._calcular(aba)
 
     def _mostrar_metodo(self, aba: int):
-        """Botão "Registrar no quadro": recalcula, mostra E registra uma
-        situação no Quadro Resumo.
+        """Botão "Registrar no quadro" para um método de cunha: recalcula,
+        mostra E registra uma situação no Quadro Resumo. Para a
+        Estabilidade Externa, ver `_registrar_externa`.
         """
         self._metodo_atual = aba
+        self._analise_atual = aba
         self._metodo_actions[aba].setChecked(True)
 
         metodo, resultado = self._calcular(aba)
@@ -423,6 +436,41 @@ class MainWindow(QMainWindow):
         resultados = resultado_para_resumo(_METODOS_POR_ABA[aba], resultado)
         self._abrir_resumo()
         self.quadro.adicionar_situacao(self.projeto, resultados)
+
+    def _registrar_externa(self):
+        """Botão "Registrar no quadro" para a Estabilidade Externa:
+        recalcula, mostra E registra os três FS (deslizamento, tombamento,
+        capacidade de carga) numa situação do Quadro Resumo — mesmo
+        mecanismo de `_mostrar_metodo`, mas para o método fora do grupo de
+        cunha.
+        """
+        metodo, resultado = self._calcular_externa()
+        if resultado is None:
+            return
+        resultados = resultado_para_resumo(MetodoEstabilidadeExterna, resultado)
+        self._abrir_resumo()
+        self.quadro.adicionar_situacao(self.projeto, resultados)
+
+    def _recalcular_atual(self):
+        """Botão "Calcular"/"Recalcular" do painel de resultados: age sobre
+        a ANÁLISE ATUALMENTE EXIBIDA (`_analise_atual`) — um método de
+        cunha ou a Estabilidade Externa — em vez de sempre voltar para o
+        último método de cunha selecionado.
+        """
+        if self._analise_atual == _ANALISE_EXT:
+            self._calcular_externa()
+        else:
+            self._calcular(self._analise_atual)
+
+    def _registrar_atual(self):
+        """Botão "Registrar no quadro" do painel de resultados: grava a
+        ANÁLISE ATUALMENTE EXIBIDA (`_analise_atual`) no Quadro Resumo —
+        um método de cunha ou a Estabilidade Externa.
+        """
+        if self._analise_atual == _ANALISE_EXT:
+            self._registrar_externa()
+        else:
+            self._mostrar_metodo(self._analise_atual)
 
     def _comparar_metodos(self):
         """Roda os 5 métodos de cunha + a Estabilidade Externa para o

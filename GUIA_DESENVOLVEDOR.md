@@ -178,13 +178,25 @@ A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
   métodos de cunha, pelo índice `aba` (0..4, mesmo índice do cache).
 - `_calcular_externa()`: idem, para `MetodoEstabilidadeExterna` — cache
   num índice dedicado (`_IDX_EXT = 5`), fora do grupo exclusivo da navbar
-  (não é uma "aba" de cunha, é uma verificação à parte) e não mexe em
-  `_metodo_atual`.
+  (não é uma "aba" de cunha, é uma verificação à parte). Não mexe em
+  `_metodo_atual` (só usado pelo diálogo de Hipóteses, que não tem aba
+  para a Estabilidade Externa), mas marca `_analise_atual = _ANALISE_EXT`.
 - `_selecionar_metodo(aba)`: troca de método de cunha na navbar —
-  recalcula (ou usa o cache) e mostra, **sem** registrar no Quadro Resumo.
-- `_mostrar_metodo(aba)`: o botão "Registrar no quadro" — recalcula/mostra
-  **e** registra uma situação (só para os 5 métodos de cunha; a
-  Estabilidade Externa entra no Quadro Resumo via `_comparar_metodos()`).
+  recalcula (ou usa o cache) e mostra, **sem** registrar no Quadro Resumo;
+  marca `_analise_atual = aba`.
+- `_analise_atual` (`int` 0..4 ou o marcador `_ANALISE_EXT`): qual análise
+  está exibida no painel de resultados agora — é o que os botões
+  "Calcular"/"Registrar no quadro" do `PainelResultados` (`_recalcular_atual`/
+  `_registrar_atual`) usam para agir sobre a análise certa, em vez de
+  sempre voltar para o último método de cunha (bug corrigido: antes esses
+  botões estavam ligados a `_metodo_atual`, que a Estabilidade Externa
+  nunca atualizava — "Calcular" com a Ext na tela recalculava Rankine).
+- `_mostrar_metodo(aba)`: o botão "Registrar no quadro" para um método de
+  cunha — recalcula/mostra **e** registra uma situação. `_registrar_externa()`
+  é o equivalente para a Estabilidade Externa (usa
+  `resumo_map.resultado_para_resumo(MetodoEstabilidadeExterna, resultado)`).
+  `_recalcular_atual()`/`_registrar_atual()` despacham para um dos dois
+  conforme `_analise_atual`.
 - `_comparar_metodos()`: roda os 5 métodos de cunha **+ a Estabilidade
   Externa** (6 ao todo) de uma vez, reaproveitando o cache do que já
   estiver calculado, e registra tudo numa única coluna consolidada.
@@ -461,32 +473,49 @@ MainWindow._selecionar_metodo(0) → _calcular(0)
     └─ status bar: primeiro aviso, OU resumo do resultado
         │
         ▼
-Usuário clica "Registrar no quadro" (ou "Comparar métodos")
+Usuário clica "Registrar no quadro" no painel de resultados (ou "Comparar métodos" na navbar)
     │
     ▼
-MainWindow._mostrar_metodo(0)                    OU     _comparar_metodos()
-    ├─ resultados = resumo_map.resultado_para_resumo(...)   [um método      [6 métodos — 5 de
-    ├─ _abrir_resumo()                                       de cunha, via   cunha + Estabilidade
-    └─ quadro.adicionar_situacao(projeto, resultados)        cache onde já   Externa numa só
-                                                              calculado]      coluna consolidada]
+MainWindow._registrar_atual()                    OU     _comparar_metodos()
+    │
+    ├─ _analise_atual é um índice 0..4          [6 métodos — 5 de cunha +
+    │  → _mostrar_metodo(aba): recalcula/         Estabilidade Externa
+    │    mostra + resultado_para_resumo(...)       numa só coluna
+    │                                               consolidada, reapro-
+    ├─ _analise_atual é _ANALISE_EXT               veitando o cache do
+    │  → _registrar_externa(): recalcula/mostra +  que já estiver
+    │    resultado_para_resumo(MetodoEstabili-      calculado]
+    │    dadeExterna, resultado)
+    │
+    └─ _abrir_resumo() + quadro.adicionar_situacao(projeto, resultados)
 
 Usuário clica "Estabilidade externa" na navbar (act_ext)
     │
     ▼
 MainWindow._calcular_externa()
+    ├─ self._analise_atual = _ANALISE_EXT   # "Calcular"/"Registrar" do painel de
+    │                                       # resultados passam a agir sobre a Ext
     ├─ metodo = MetodoEstabilidadeExterna()
     └─ _calcular_metodo(metodo, _IDX_EXT)   # mesmo caminho de cache/esquema/painel/log,
-                                             # mas fora do grupo exclusivo da navbar (não
-                                             # mexe em _metodo_atual) e sem "Registrar no
-                                             # quadro" — só _comparar_metodos regista a Ext
+                                             # mas fora do grupo exclusivo da navbar
+                                             # (não mexe em _metodo_atual, só em
+                                             # _analise_atual)
+
+Usuário clica "Calcular"/"Recalcular" no painel de resultados
+    │
+    ▼
+MainWindow._recalcular_atual()
+    ├─ _analise_atual é um índice 0..4  → _calcular(aba)
+    └─ _analise_atual é _ANALISE_EXT    → _calcular_externa()
 ```
 
 Essa integração de "Registrar no quadro" está feita para os 5 métodos de
 cunha (`_METODOS_POR_ABA` em `main_window.py`), inclusive Bishop
 (`bishop_fs`) e Geossintético (`n_camadas`) — ambos com linha própria no
-Quadro Resumo. A Estabilidade Externa entra pelo caminho separado acima
-(`_calcular_externa`) e só ganha uma coluna no Quadro Resumo via "Comparar
-métodos" (`_comparar_metodos`), que já a inclui junto com os 5 de cunha.
+Quadro Resumo — e, desde a correção do bug acima, também para a
+Estabilidade Externa via `_registrar_externa`. "Comparar métodos"
+continua sendo o único jeito de registrar os 6 numa única coluna
+consolidada de uma vez.
 
 ---
 
@@ -636,8 +665,10 @@ o único método cujo construtor aceita um argumento (`fonte_phi_base="fundacao"
 | "aterro"` — de qual solo vem o φ da base do bloco). Por não ser um método de
 cunha, ele não entra em `_METODOS_POR_ABA`: tem sua própria `QAction`
 (`act_ext` → `MainWindow._calcular_externa`) fora do `grupo_metodos` exclusivo
-da navbar, e só ganha coluna no Quadro Resumo via `_comparar_metodos` — não
-tem "Registrar no quadro" individual (seção 4).
+da navbar. Ganha coluna no Quadro Resumo tanto via `_comparar_metodos` (junto
+com os 5 de cunha) quanto individualmente pelo botão "Registrar no quadro" do
+painel de resultados, que despacha para `_registrar_externa` quando
+`_analise_atual` é a Estabilidade Externa (seção 4).
 
 ### 5.7 ...mudar o número de situações armazenadas no Quadro Resumo
 
