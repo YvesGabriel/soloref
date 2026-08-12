@@ -95,7 +95,8 @@ SoloRef/
 │           ├── entrada_dados.py    ← as classes `_Aba*` (reaproveitadas por panels.py);
 │           │                         `EntradaDadosDialog` é resíduo da versão MDI, não usado
 │           ├── esquema_widget.py   ← desenho do muro + superfície crítica do método ativo
-│           ├── metodo_info.py      ← diálogo "Hipóteses / figura", aberto por botão
+│           ├── metodo_info.py      ← diálogo "Hipóteses / figura" — resíduo, não usado
+│           │                         (botão removido; hipóteses aparecem em panels.py)
 │           └── quadro_resumo.py    ← tabela das últimas 8 situações (27 linhas)
 │
 └── tests/
@@ -178,9 +179,8 @@ A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
   métodos de cunha, pelo índice `aba` (0..4, mesmo índice do cache).
 - `_calcular_externa()`: idem, para `MetodoEstabilidadeExterna` — cache
   num índice dedicado (`_IDX_EXT = 5`), fora do grupo exclusivo da navbar
-  (não é uma "aba" de cunha, é uma verificação à parte). Não mexe em
-  `_metodo_atual` (só usado pelo diálogo de Hipóteses, que não tem aba
-  para a Estabilidade Externa), mas marca `_analise_atual = _ANALISE_EXT`.
+  (não é uma "aba" de cunha, é uma verificação à parte). Marca
+  `_analise_atual = _ANALISE_EXT`.
 - `_selecionar_metodo(aba)`: troca de método de cunha na navbar —
   recalcula (ou usa o cache) e mostra, **sem** registrar no Quadro Resumo;
   marca `_analise_atual = aba`.
@@ -189,8 +189,9 @@ A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
   "Calcular"/"Registrar no quadro" do `PainelResultados` (`_recalcular_atual`/
   `_registrar_atual`) usam para agir sobre a análise certa, em vez de
   sempre voltar para o último método de cunha (bug corrigido: antes esses
-  botões estavam ligados a `_metodo_atual`, que a Estabilidade Externa
-  nunca atualizava — "Calcular" com a Ext na tela recalculava Rankine).
+  botões estavam ligados a um atributo — `_metodo_atual`, hoje removido —
+  que a Estabilidade Externa nunca atualizava; "Calcular" com a Ext na
+  tela recalculava Rankine).
 - `_mostrar_metodo(aba)`: o botão "Registrar no quadro" para um método de
   cunha — recalcula/mostra **e** registra uma situação. `_registrar_externa()`
   é o equivalente para a Estabilidade Externa (usa
@@ -214,24 +215,30 @@ A janela principal (`MainWindow`, herda de `QMainWindow`). Contém:
 
 #### `panels.py`
 
-`PainelDados`: as oito abas de entrada (reaproveita as classes `_Aba*` de
+`PainelDados`: as seis abas de entrada (reaproveita as classes `_Aba*` de
 `dialogs/entrada_dados.py`), sempre visíveis, emitindo `dadosAlterados` a
 **qualquer** edição — não só geometria/sobrecarga, precisa cobrir tudo para o
 rastreamento de alterações não salvas funcionar direito. Também:
 
-- Marca "Face" como reservada (sufixo "(reservado)" + aviso no topo da aba)
-  — é a única aba que nenhum método implementado hoje lê
-  (`relevancia.ABAS_RESERVADAS`). "Solo de encosta" e "Solo de fundação"
-  eram reservadas antes da Estabilidade Externa; hoje são consumidas de
-  verdade (solo retido / atrito de base + capacidade de carga).
-- `destacar_metodo(sigla)`: pinta as abas relevantes para o método ativo
-  (`relevancia.abas_relevantes`) e atenua as demais — inclui "Ext".
+- `destacar_metodo(sigla)`: realça as abas relevantes para o método ativo
+  (`relevancia.abas_relevantes`) — inclui "Ext" — com **negrito** +
+  `self.palette().color(QPalette.Link)` (cor de link do tema: se adapta
+  sozinha a claro/escuro, ao contrário de um hex fixo) via
+  `_TabBarComNegrito`, uma `QTabBar` customizada só pra permitir negritar
+  tabs por índice (API que o `QTabBar` padrão não tem — `QStyleOptionTab`
+  não carrega fonte, então o `paintEvent` troca a fonte do `QStylePainter`
+  tab a tab antes de `drawControl`). As abas não relevantes voltam à cor e
+  ao peso padrão do tema — nenhuma cor fixa também para "não relevante".
+- `relevancia.ABAS_RESERVADAS` está vazia hoje (nenhuma aba sobrou
+  reservada desde que Face/Identificação foram removidas do modelo).
 
 `PainelResultados`: cartões de resultado (via `interpretacao.cartoes_resultado`,
-já com selos de julgamento), banner de avisos (`metodo.avisos(projeto)`) e os
+já com selos de julgamento), banner de avisos (`metodo.avisos(projeto)`), a
+caixa "Hipóteses do método" (texto de `metodo.hipoteses`, sempre visível — é
+o que hoje cumpre o papel do antigo botão "Hipóteses / figura", removido) e os
 botões **Recalcular** (renomeado de "Calcular" — só recalcula o método ativo;
 trocar de método na navbar já recalcula sozinho, ver docstring da classe para
-a decisão completa), **Registrar no quadro** e **Hipóteses / figura**.
+a decisão completa) e **Registrar no quadro**.
 
 **Mexer aqui quando:**
 
@@ -361,20 +368,18 @@ recalcular → a cunha desenhada ficaria desatualizada).
 
 #### `dialogs/metodo_info.py`
 
-O diálogo **"Hipóteses / figura"** (aberto pelo botão de mesmo nome no painel
-de resultados — não é mais um passo obrigatório antes de calcular), com uma
-aba para cada método (Coulomb, Rankine, Dois Blocos, Bishop, Geossintéticos).
-Cada aba mostra:
-
-- A figura da cunha do método (`_FiguraCunha`, desenhada com `QPainter`).
-- Uma descrição curta do método.
-- O texto das hipóteses (lido da própria classe do método via `metodo.hipoteses`).
-
-**Mexer aqui quando:**
-
-- Mudar a figura da cunha de algum método (entrar em `_FiguraCunha.paintEvent` e ajustar o desenho).
-- Adicionar uma nova aba para um novo método.
-- Mudar o texto de descrição de um método.
+**Resíduo — não é mais instanciado em lugar nenhum.** Era o diálogo
+"Hipóteses / figura" (aberto por um botão no painel de resultados), com uma
+aba por método (Coulomb, Rankine, Dois Blocos, Bishop, Geossintéticos) — cada
+uma com a figura da cunha (`_FiguraCunha`, `QPainter`), uma descrição curta e
+o texto de `metodo.hipoteses`. O botão foi removido (o texto de hipóteses
+agora aparece direto na caixa "Hipóteses do método" do painel de resultados,
+sem precisar de diálogo nem de figura à parte) e `MainWindow._ver_hipoteses`/
+o import de `MetodoInfoDialog` saíram de `main_window.py` junto. Mesmo
+tratamento dado a `EntradaDadosDialog` em `entrada_dados.py`: não foi
+removido porque limpar código morto não fazia parte de nenhuma tarefa; se for
+mexer em hipóteses/descrição de método, edite a tupla `hipoteses` da classe
+em `core/methods/*.py`, não este arquivo.
 
 #### `dialogs/quadro_resumo.py`
 
@@ -498,8 +503,6 @@ MainWindow._calcular_externa()
     ├─ metodo = MetodoEstabilidadeExterna()
     └─ _calcular_metodo(metodo, _IDX_EXT)   # mesmo caminho de cache/esquema/painel/log,
                                              # mas fora do grupo exclusivo da navbar
-                                             # (não mexe em _metodo_atual, só em
-                                             # _analise_atual)
 
 Usuário clica "Calcular"/"Recalcular" no painel de resultados
     │
@@ -636,26 +639,26 @@ Está tudo em `persistence.py`. Funções `salvar(projeto, caminho)` e
 Exemplo: implementar Spencer (mais geral que Bishop).
 
 1. Criar `soloref/core/methods/spencer.py` herdando de `MetodoAnalise` —
-   implemente `calcular` e, se fizer sentido, `avisos(projeto)` (faixa de
-   validade — ver seção 15 do manual/`test_validade.py`).
+   implemente `calcular`, preencha a tupla `hipoteses` (aparece sozinha na
+   caixa "Hipóteses do método" do painel de resultados, sem UI adicional) e,
+   se fizer sentido, `avisos(projeto)` (faixa de validade — ver seção 15 do
+   manual/`test_validade.py`).
 2. Importar em `methods/__init__.py`.
-3. Em `dialogs/metodo_info.py`, adicionar uma nova aba no `MetodoInfoDialog`
-   (figura da cunha + hipóteses).
-4. Em `main_window.py`: criar a `QAction` (checkável, no `grupo_metodos`),
+3. Em `main_window.py`: criar a `QAction` (checkável, no `grupo_metodos`),
    adicionar ao menu e à navbar, e um índice em `_METODOS_POR_ABA`.
-5. Em `ui/relevancia.py`: adicionar a sigla ao mapa `_RELEVANCIA` (quais
+4. Em `ui/relevancia.py`: adicionar a sigla ao mapa `_RELEVANCIA` (quais
    abas/campos o método usa) — sem isso, nenhuma aba se destaca quando ele
    está ativo.
-6. Em `ui/resumo_map.py`: um `if metodo_cls is MetodoSpencer: return {...}`
+5. Em `ui/resumo_map.py`: um `if metodo_cls is MetodoSpencer: return {...}`
    para a linha dele no Quadro Resumo (e a linha correspondente em
    `dialogs/quadro_resumo.py::LINHAS`).
-7. Opcional: um `_overlay_spencer` em `dialogs/esquema_widget.py` para
+6. Opcional: um `_overlay_spencer` em `dialogs/esquema_widget.py` para
    desenhar a superfície crítica dele (seção 5.4), e um caso em
    `interpretacao.cartoes_resultado` se o resultado pedir um cartão/selo
    específico (seção 3.4).
 
 A separação entre core e UI faz com que **o cálculo em si nunca exija mexer em
-código de outro método**; os passos 4–7 são só "plugar" o método novo nos
+código de outro método**; os passos 3–6 são só "plugar" o método novo nos
 módulos de UI que precisam saber que ele existe.
 
 Há um precedente real que foge um pouco do padrão acima:
@@ -743,7 +746,7 @@ saída). No estado atual do projeto, ambos os comandos devem terminar 100% verde
 | Divisão segura de tangente perto de singularidades (β/βe = 0°, 90°) | `ui/geometria_segura.py` |
 | Classes `_Aba*` de entrada (campos de cada aba) | `ui/dialogs/entrada_dados.py` |
 | Desenho do muro e da superfície crítica (esquema ilustrativo) | `ui/dialogs/esquema_widget.py` |
-| Diálogo "Hipóteses / figura" dos métodos | `ui/dialogs/metodo_info.py` |
+| Texto de hipóteses de um método | tupla `hipoteses` em `core/methods/<metodo>.py` |
 | Tabela do Quadro Resumo (linhas, formatação) | `ui/dialogs/quadro_resumo.py` |
 | Dataset de casos de validação | `tests/casos_literatura.py` |
 | Conferência com o programa original | `tests/casos_referencia_original.csv` |

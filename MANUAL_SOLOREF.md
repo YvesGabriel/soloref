@@ -182,17 +182,20 @@ ilustrativo ao vivo e, se mudar algo em relação ao que está salvo, acende o
 **As abas mudam de cor conforme o método ativo.** Cada método usa só um
 subconjunto dos dados — Rankine, por exemplo, não olha para o atrito
 solo-muro (δ), que só entra em Coulomb e Dois Blocos. Ao trocar de método na
-navbar, as abas relevantes para ele ficam em destaque (azul, com uma dica
-"Usa: ..." ao passar o mouse) e as demais ficam atenuadas (cinza) — uma forma
-rápida de saber que campo vale a pena conferir antes de calcular.
+navbar, as abas relevantes para ele ficam em destaque (**negrito** + a cor de
+link do seu tema — adapta sozinha entre claro e escuro —, com uma dica
+"Usa: ..." ao passar o mouse) e as demais voltam à cor e ao peso padrão do
+tema — uma forma rápida de saber que campo vale a pena conferir antes de
+calcular, que não depende só de cor (o negrito continua visível mesmo em
+telas monocromáticas ou para quem tem dificuldade de distinguir cores).
 
 **"Solo de encosta" e "Solo de fundação" alimentam a estabilidade externa.**
 Os cinco métodos de cunha (seções 7.1–7.5) não usam essas duas abas — mas a
 **Estabilidade externa** (seção 7.6) usa: "Solo de encosta" descreve o solo
 retido atrás do bloco (o empuxo motor), "Solo de fundação" descreve o solo de
 apoio (atrito de base e capacidade de carga). Por isso as duas ficam em
-destaque quando você seleciona Estabilidade externa na navbar, e atenuadas
-nos outros métodos — acompanhe a cor conforme muda de método.
+destaque quando você seleciona Estabilidade externa na navbar, e voltam ao
+padrão nos outros métodos — acompanhe o negrito/cor conforme muda de método.
 
 **"Face" continua reservada.** É a única aba que nenhum método implementado
 hoje lê — mostra um aviso amarelo no topo lembrando disso. Os campos
@@ -278,9 +281,10 @@ programa avisa sozinho — ver "Avisos de aplicabilidade" abaixo.
 **Como rodar.** Com o exemplo carregado, clique no método **Rankine** na
 navbar (ou no menu Dimensionamento) — o resultado aparece na hora no painel da
 direita, e a cunha real (não mais um traço genérico) é desenhada por cima do
-muro no esquema central. O botão "Hipóteses / figura" mostra as hipóteses do
-método a qualquer momento, sem travar o fluxo. Para guardar essa situação e
-comparar com outra depois, clique em **Registrar no quadro**.
+muro no esquema central. A caixa "Hipóteses do método", no rodapé do painel de
+resultados, mostra as hipóteses do método ativo o tempo todo, sem precisar
+abrir nada. Para guardar essa situação e comparar com outra depois, clique em
+**Registrar no quadro**.
 
 **Resultado no exemplo.** Ka = 0,333; Ea = **66,67 kN/m** (53,33 do solo + 13,33
 da sobrecarga); cunha a 60°. O painel de resultados mostra um cartão **Ponto de
@@ -792,9 +796,10 @@ vazio), alimentado sob demanda sem que os testes principais dependam dele.
 ## 18. Como estender o programa
 
 O caminho para adicionar um método novo: criar `core/methods/<novo>.py` herdando
-de `MetodoAnalise`, registrá-lo no `__init__.py` do pacote de métodos, acrescentar
-sua aba de hipóteses em `dialogs/metodo_info.py` e ligá-lo na toolbar/menu de
-`ui/main_window.py`. Para um campo de entrada novo, adiciona-se ao dataclass
+de `MetodoAnalise`, registrá-lo no `__init__.py` do pacote de métodos, preencher
+a tupla `hipoteses` (aparece sozinha na caixa "Hipóteses do método" do painel de
+resultados, sem UI adicional) e ligá-lo na toolbar/menu de `ui/main_window.py`.
+Para um campo de entrada novo, adiciona-se ao dataclass
 correspondente em `models.py` e ao formulário em `dialogs/entrada_dados.py` — a
 persistência acompanha sozinha. Para um novo caso de validação, basta uma entrada
 no dataset `tests/casos_literatura.py`. O `GUIA_DESENVOLVEDOR.md` traz um cookbook

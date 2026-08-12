@@ -208,18 +208,18 @@ class MetodoInfoDialog(QDialog):
             tabs.addTab(
                 _AbaMetodo(
                     MetodoBishop(), "dois_blocos",
-                    "(NOVO) Análise por superfície de ruptura circular "
-                    "dividida em fatias, com iteração do fator de segurança.",
+                    "Análise por superfície de ruptura circular dividida "
+                    "em fatias, com iteração do fator de segurança.",
                 ),
-                "Método de Bishop (novo)",
+                "Método de Bishop",
             )
             tabs.addTab(
                 _AbaMetodo(
                     MetodoGeossintetico(), "rankine",
-                    "(NOVO) Dimensionamento de camadas de reforço com "
+                    "Dimensionamento de camadas de reforço com "
                     "geossintéticos, compondo com os métodos de cunha plana.",
                 ),
-                "Reforço com geossintéticos (novo)",
+                "Reforço com geossintéticos",
             )
         tabs.setCurrentIndex(aba_inicial)
 

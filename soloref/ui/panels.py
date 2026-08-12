@@ -15,10 +15,11 @@ nenhum da tela).
 from __future__ import annotations
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (
-    QWidget, QTabWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
-    QLabel, QPushButton, QPlainTextEdit, QFrame, QMessageBox,
+    QWidget, QTabWidget, QTabBar, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QFormLayout, QLabel, QPushButton, QPlainTextEdit, QFrame, QMessageBox,
+    QStyle, QStyleOptionTab, QStylePainter,
 )
 
 from . import interpretacao, relevancia
@@ -39,8 +40,44 @@ _ABAS_ORDENADAS = (
     ("Reforço", relevancia.ABA_REFORCO),
 )
 
-_COR_RELEVANTE = QColor("#0b3d91")
-_COR_ATENUADA = QColor("#9e9e9e")
+class _TabBarComNegrito(QTabBar):
+    """`QTabBar` que permite negritar tabs específicas por índice.
+
+    O destaque de aba relevante (`PainelDados.destacar_metodo`) já muda a
+    cor do texto via `setTabTextColor` — mas cor sozinha não é confiável
+    para acessibilidade (daltonismo, monitor mal calibrado, tema com pouco
+    contraste). Negrito reforça o mesmo sinal por uma via independente da
+    cor. `QTabBar` não tem um `setTabFont` por índice pronto, então isso
+    reimplementa `paintEvent` só para sobrescrever a fonte de cada tab
+    antes de mandar o `QStyle` desenhar — o resto do desenho (forma,
+    cores, hover, etc.) continua 100% do estilo nativo da plataforma.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._negrito: set[int] = set()
+
+    def set_negrito(self, indices: set[int]) -> None:
+        if indices != self._negrito:
+            self._negrito = set(indices)
+            self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        # QStyleOptionTab não tem campo de fonte (só `fontMetrics`, que é
+        # derivado) — quem decide a fonte usada para desenhar o texto é o
+        # QPainter no momento do `drawControl(CE_TabBarTabLabel, ...)`, daí
+        # trocar a fonte do painter mesmo, tab a tab, em vez de mexer em
+        # `opt`.
+        painter = QStylePainter(self)
+        fonte_normal = self.font()
+        fonte_negrito = QFont(fonte_normal)
+        fonte_negrito.setBold(True)
+        for idx in range(self.count()):
+            opt = QStyleOptionTab()
+            self.initStyleOption(opt, idx)
+            painter.setFont(fonte_negrito if idx in self._negrito else fonte_normal)
+            painter.drawControl(QStyle.CE_TabBarTabShape, opt)
+            painter.drawControl(QStyle.CE_TabBarTabLabel, opt)
 
 
 # --------------------------------------------------------------------------- #
@@ -137,6 +174,10 @@ class PainelDados(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         self.tabs = QTabWidget()
+        # Tab bar customizada (só pra poder negritar as abas relevantes do
+        # método ativo) — precisa ser trocada antes de adicionar qualquer
+        # aba, é assim que QTabWidget.setTabBar funciona.
+        self.tabs.setTabBar(_TabBarComNegrito())
         # Nomes completos das abas sempre visíveis: nunca abreviar/elidir,
         # usar setas de rolagem se a largura do painel não for suficiente.
         self.tabs.setElideMode(Qt.ElideNone)
@@ -219,22 +260,31 @@ class PainelDados(QWidget):
     # ------------------------------------------------------------------ #
     def destacar_metodo(self, sigla: str | None) -> None:
         """Realça as abas que o método ativo (`sigla` = `metodo.sigla`)
-        consome e atenua as demais — ver `ui/relevancia.py`. `sigla=None`
-        (nenhum método ativo ainda) limpa o destaque.
+        consome — ver `ui/relevancia.py`. `sigla=None` (nenhum método ativo
+        ainda) limpa o destaque.
+
+        O destaque usa a cor de link da paleta do sistema (adapta sozinha
+        a tema claro/escuro, ao contrário de um azul fixo) **e** negrito —
+        cor sozinha não é um sinal confiável de acessibilidade (daltonismo,
+        telas mal calibradas), então o negrito garante que a aba relevante
+        continua identificável mesmo sem depender da cor. As abas não
+        relevantes voltam à cor e ao peso padrão do tema — nenhuma cor fixa.
         """
         relevantes = set(relevancia.abas_relevantes(sigla)) if sigla else set()
         tab_bar = self.tabs.tabBar()
+        cor_relevante = self.palette().color(QPalette.Link)
+        negrito: set[int] = set()
         for idx, (_rotulo, chave) in enumerate(_ABAS_ORDENADAS):
-            if sigla is None:
-                tab_bar.setTabTextColor(idx, QColor())
-                tab_bar.setTabToolTip(idx, "")
-            elif chave in relevantes:
-                tab_bar.setTabTextColor(idx, _COR_RELEVANTE)
+            if sigla is not None and chave in relevantes:
+                tab_bar.setTabTextColor(idx, cor_relevante)
+                negrito.add(idx)
                 campos = relevancia.campos_relevantes(sigla, chave)
                 tab_bar.setTabToolTip(idx, f"Usa: {', '.join(campos)}" if campos else "")
             else:
-                tab_bar.setTabTextColor(idx, _COR_ATENUADA)
+                tab_bar.setTabTextColor(idx, QColor())  # cor padrão do tema
                 tab_bar.setTabToolTip(idx, "")
+        if isinstance(tab_bar, _TabBarComNegrito):
+            tab_bar.set_negrito(negrito)
 
     # ------------------------------------------------------------------ #
     def set_projeto(self, projeto: Projeto) -> None:
@@ -280,7 +330,6 @@ class PainelResultados(QWidget):
 
     calcularSolicitado = Signal()
     registrarSolicitado = Signal()
-    verHipoteses = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -315,14 +364,11 @@ class PainelResultados(QWidget):
             "de método já recalcula sozinho)."
         )
         self.btn_registrar = QPushButton("Registrar no quadro")
-        self.btn_hip = QPushButton("Hipóteses / figura")
         self.btn_calcular.clicked.connect(self.calcularSolicitado)
         self.btn_registrar.clicked.connect(self.registrarSolicitado)
-        self.btn_hip.clicked.connect(self.verHipoteses)
         btns.addWidget(self.btn_calcular)
         btns.addWidget(self.btn_registrar)
         lay.addLayout(btns)
-        lay.addWidget(self.btn_hip)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)

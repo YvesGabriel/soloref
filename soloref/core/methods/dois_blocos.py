@@ -186,6 +186,8 @@ class MetodoDoisBlocos(MetodoAnalise):
     hipoteses = (
         "Método de cálculo por equilíbrio limite; faz o equilíbrio das "
         "solicitações sobre a cunha de ruptura.",
+        "Considera o atrito solo-muro (δ), como Coulomb, na interação "
+        "entre a estrutura e o aterro.",
         "Como considera cunha de ruptura bilinear (tenta simular uma cunha "
         "circular), este método vale para estruturas com parede mais "
         "abatida.",

@@ -142,6 +142,9 @@ class MetodoCoulomb(MetodoAnalise):
     hipoteses = (
         "Método de cálculo por equilíbrio limite; faz o equilíbrio das "
         "solicitações sobre a cunha de ruptura.",
+        "Considera o atrito solo-muro (δ) na interface entre a estrutura e "
+        "o aterro, e permite a face inclinada (β) — a diferença central em "
+        "relação a Rankine, que ignora os dois.",
         "Como considera cunha de ruptura plana, este método só vale para "
         "estruturas cuja inclinação do muro esteja entre 70° e 90°, "
         "inclusive; para inclinações menores que 70° deve-se considerar "

@@ -181,7 +181,12 @@ class MetodoBishop(MetodoAnalise):
         "(simplificação de Bishop).",
         "Faz iteração até convergência do fator de segurança.",
         "Aplicável a taludes com geometria mais complexa que os métodos de "
-        "cunha plana.",
+        "cunha plana — vale para faces/taludes abatidos (β < 70°, medido "
+        "da horizontal); para faces mais íngremes prefira Coulomb/Rankine "
+        "(cunha plana), e evite β ≥ 89°, onde o círculo de ruptura "
+        "degenera (resultado sem sentido físico).",
+        "Considera a sobrecarga q somada ao peso das fatias sob o trecho "
+        "horizontal do topo do talude.",
     )
 
     def calcular(self, projeto: Projeto) -> Resultado:
