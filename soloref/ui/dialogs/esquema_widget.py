@@ -70,6 +70,15 @@ class EsquemaWidget(QWidget):
     # ------------------------------------------------------------------ #
     # Transformação mundo → tela, compartilhada pelo muro e pelos overlays
     # ------------------------------------------------------------------ #
+    # Espaço reservado em pixels, fixo (não escala), para o que é desenhado
+    # em torno do polígono do muro: cota H à esquerda, cotas Ht/rótulos de
+    # overlay à direita, setas de sobrecarga + rótulos de ângulo acima da
+    # crista, faixa de fundação + cota B abaixo da linha do solo.
+    _PAD_ESQUERDA = 45.0
+    _PAD_DIREITA = 70.0
+    _PAD_TOPO = 45.0
+    _PAD_BASE = 45.0
+
     def _transformacao(self):
         """Calcula `(scale, x0, y0)`: escala (px/m) e origem em tela do pé
         do muro. Mundo em metros, origem no pé do muro, x cresce para
@@ -77,24 +86,55 @@ class EsquemaWidget(QWidget):
         nas coordenadas de `extras` em `core/methods/bishop.py` e
         `dois_blocos.py`. Devolve `None` se a área de desenho for pequena
         demais para valer a pena desenhar.
+
+        Fit-to-content: calcula a caixa delimitadora REAL de todos os
+        pontos do muro (pé, topo da face, topo do talude, pé da encosta)
+        e aplica uma única escala uniforme que faça essa caixa caber no
+        painel — assim B, H e Ht ficam sempre em proporção correta entre
+        si (mudar B de verdade muda a largura desenhada), em vez da
+        heurística antiga (`B * 2.2` fixo) que dava um resultado só
+        aproximado.
         """
-        g = self.projeto.geometria
-        m = 30
-        w = self.width() - 2 * m
-        h = self.height() - 2 * m
-        if w < 50 or h < 50:
+        w_disp = self.width() - self._PAD_ESQUERDA - self._PAD_DIREITA
+        h_disp = self.height() - self._PAD_TOPO - self._PAD_BASE
+        if w_disp < 50 or h_disp < 50:
             return None
 
+        x_min, x_max, y_min, y_max = self._bbox_mundo()
+        total_w = max(x_max - x_min, 0.5)
+        total_h = max(y_max - y_min, 0.5)
+        scale = min(w_disp / total_w, h_disp / total_h)
+
+        # Espaço que sobra depois de escalar (a caixa não preenche
+        # necessariamente toda a área disponível nas duas dimensões) —
+        # centraliza o desenho nesse espaço em vez de sempre colar num
+        # canto fixo.
+        extra_w = max(w_disp - total_w * scale, 0.0)
+        extra_h = max(h_disp - total_h * scale, 0.0)
+
+        x0 = self._PAD_ESQUERDA + extra_w / 2.0 - x_min * scale
+        y0 = self.height() - self._PAD_BASE - extra_h / 2.0 + y_min * scale
+        return scale, x0, y0
+
+    def _bbox_mundo(self) -> tuple[float, float, float, float]:
+        """`(x_min, x_max, y_min, y_max)` dos quatro pontos-chave do muro
+        (pé, topo da face, topo do talude, pé da encosta), em metros —
+        mesmas fórmulas usadas em `_desenhar` para os pontos P0..P3."""
+        g = self.projeto.geometria
         H = max(g.altura_H_m, 1.0)
         Ht = max(g.altura_topo_Ht_m, 0.0)
         B = max(g.largura_aterro_B_m, 0.5)
-        total_h = H + Ht + 1.0
-        total_w = B * 2.2
-        scale = min(w / total_w, h / total_h)
+        beta = math.radians(g.inclinacao_face_beta_g)
+        beta_e = math.radians(g.inclinacao_encosta_beta_e_g)
+        i_topo = math.radians(g.inclinacao_topo_i_g)
 
-        x0 = m + w * 0.30
-        y0 = m + h * 0.85
-        return scale, x0, y0
+        x_face, _ = cotg_segura(H, beta)
+        dy_topo = B * math.tan(i_topo)
+        x_enc, _ = cotg_segura(Ht, beta_e)
+
+        xs = (0.0, x_face, x_face + B, x_face + B + x_enc)
+        ys = (0.0, H, H + dy_topo, H + dy_topo + Ht)
+        return min(xs), max(xs), min(ys), max(ys)
 
     @staticmethod
     def _w2s(x_m: float, y_m: float, scale: float, x0: float, y0: float) -> QPointF:
@@ -214,12 +254,27 @@ class EsquemaWidget(QWidget):
                    QPointF(P2.x(), y0 + 18))
         p.drawText(QRectF((P1.x() + P2.x()) / 2 - 10, y0 + 18, 20, 14),
                    Qt.AlignCenter, "B")
+        # i (inclinação do talude de topo) — só quando ≠ 0, mesmo critério
+        # usado pra "Ht" acima.
+        if abs(g.inclinacao_topo_i_g) > 1e-9:
+            meio_topo = QPointF((P1.x() + P2.x()) / 2.0, (P1.y() + P2.y()) / 2.0)
+            p.drawText(QRectF(meio_topo.x() - 10, meio_topo.y() - 22, 20, 16),
+                       Qt.AlignCenter, "i")
 
-        # ângulos β / βe
+        # ângulos β / βe / i — letra (já existia p/ β e βe) + arco pequeno
+        # indicando visualmente a região do ângulo entre a horizontal e a
+        # aresta correspondente.
+        cor_angulo = QColor("#0a8")
         p.drawText(QRectF(P0.x() + 4, P0.y() - 16, 14, 14),
                    Qt.AlignLeft, "β")
+        self._arco_angulo(p, P0, QPointF(P0.x() - 40, P0.y()), P1, cor_angulo)
+
         p.drawText(QRectF(P3.x() - 14, y0 - 16, 14, 14),
                    Qt.AlignRight, "βe")
+        self._arco_angulo(p, P2, QPointF(P2.x() + 40, P2.y()), P3, cor_angulo)
+
+        if abs(g.inclinacao_topo_i_g) > 1e-9:
+            self._arco_angulo(p, P1, QPointF(P1.x() + 40, P1.y()), P2, cor_angulo)
 
         if avisos_desenho:
             self._desenhar_aviso_geometria(p, avisos_desenho)
@@ -240,6 +295,43 @@ class EsquemaWidget(QWidget):
         p.setFont(font)
         p.setPen(QPen(QColor("#8a6d00"), 1))
         p.drawText(rect, Qt.AlignCenter, texto)
+
+    @staticmethod
+    def _arco_angulo(p: QPainter, vertice: QPointF, p_ref1: QPointF,
+                      p_ref2: QPointF, cor: QColor, raio_max: float = 18.0) -> None:
+        """Desenha um pequeno arco em `vertice`, indicando a região do
+        ângulo entre as direções `vertice->p_ref1` e `vertice->p_ref2`
+        (sempre o caminho mais curto entre as duas). Raio limitado a
+        `raio_max` e a ~45% da menor das duas distâncias, pra não "vazar"
+        para fora de arestas curtas em desenhos pequenos.
+        """
+        d1 = math.hypot(p_ref1.x() - vertice.x(), p_ref1.y() - vertice.y())
+        d2 = math.hypot(p_ref2.x() - vertice.x(), p_ref2.y() - vertice.y())
+        if d1 < 1e-6 or d2 < 1e-6:
+            return  # pontos coincidentes (ex.: Ht=0 com βe=90°) — sem direção definida
+        raio = max(6.0, min(raio_max, min(d1, d2) * 0.45))
+
+        # Ângulo de cada direção no sentido "visual" do QPainterPath.arcTo
+        # (0° = 3 horas, positivo = anti-horário como um observador vê na
+        # tela) — daí o -dy: o eixo y da tela cresce para baixo, então
+        # inverter o sinal de dy converte para a convenção usada por
+        # arcTo/arcMoveTo (ver docs de QPainterPath.arcTo).
+        def _angulo_graus(ref: QPointF) -> float:
+            dx = ref.x() - vertice.x()
+            dy = ref.y() - vertice.y()
+            return math.degrees(math.atan2(-dy, dx))
+
+        ang1 = _angulo_graus(p_ref1)
+        ang2 = _angulo_graus(p_ref2)
+        sweep = (ang2 - ang1 + 180.0) % 360.0 - 180.0  # menor caminho, (-180, 180]
+
+        rect = QRectF(vertice.x() - raio, vertice.y() - raio, raio * 2, raio * 2)
+        path = QPainterPath()
+        path.arcMoveTo(rect, ang1)
+        path.arcTo(rect, ang1, sweep)
+        p.setPen(QPen(cor, 1))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(path)
 
     # ------------------------------------------------------------------ #
     # Overlay da superfície crítica (por método)
