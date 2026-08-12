@@ -6,20 +6,34 @@ versionamento por git se o usuário quiser.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from pathlib import Path
+from typing import Type, TypeVar
 
 from .models import (
     Projeto,
-    Identificacao,
     Geometria,
-    FaceEstrutura,
     Solo,
     Sobrecarga,
     Reforco,
 )
 
 EXTENSAO = ".soloref.json"
+
+_T = TypeVar("_T")
+
+
+def _filtra_campos(cls: Type[_T], dados: dict) -> dict:
+    """Mantém só as chaves de `dados` que correspondem a campos de `cls`.
+
+    Protege `carregar()` contra seções/campos que existiram no passado (ex.:
+    "face", "identificacao") e ainda aparecem em arquivos `.soloref.json`
+    salvos por versões antigas do programa — em vez de quebrar com
+    `TypeError: unexpected keyword argument`, o campo desconhecido é
+    simplesmente ignorado.
+    """
+    campos = {f.name for f in fields(cls)}
+    return {k: v for k, v in dados.items() if k in campos}
 
 
 def salvar(projeto: Projeto, caminho: str | Path) -> None:
@@ -34,12 +48,10 @@ def carregar(caminho: str | Path) -> Projeto:
     with Path(caminho).open(encoding="utf-8") as f:
         data = json.load(f)
     return Projeto(
-        identificacao=Identificacao(**data["identificacao"]),
-        geometria=Geometria(**data["geometria"]),
-        face=FaceEstrutura(**data["face"]),
-        solo_aterro=Solo(**data["solo_aterro"]),
-        solo_encosta=Solo(**data["solo_encosta"]),
-        solo_fundacao=Solo(**data["solo_fundacao"]),
-        sobrecarga=Sobrecarga(**data["sobrecarga"]),
-        reforco=Reforco(**data.get("reforco", {})),  # compat com arquivos antigos
+        geometria=Geometria(**_filtra_campos(Geometria, data.get("geometria", {}))),
+        solo_aterro=Solo(**_filtra_campos(Solo, data.get("solo_aterro", {}))),
+        solo_encosta=Solo(**_filtra_campos(Solo, data.get("solo_encosta", {}))),
+        solo_fundacao=Solo(**_filtra_campos(Solo, data.get("solo_fundacao", {}))),
+        sobrecarga=Sobrecarga(**_filtra_campos(Sobrecarga, data.get("sobrecarga", {}))),
+        reforco=Reforco(**_filtra_campos(Reforco, data.get("reforco", {}))),
     )

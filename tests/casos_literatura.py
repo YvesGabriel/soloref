@@ -69,9 +69,9 @@ def monta_projeto(entradas: dict[str, Any]) -> Projeto:
 
     `entradas` é um dict cujas chaves são os nomes das seções de `Projeto`
     (`geometria`, `solo_aterro`, `solo_encosta`, `solo_fundacao`,
-    `sobrecarga`, `face`, `identificacao`) e cujos valores são dicts de
-    overrides para os campos daquela seção. Seções/campos omitidos mantêm o
-    default de `Projeto`.
+    `sobrecarga`, `reforco`) e cujos valores são dicts de overrides para os
+    campos daquela seção. Seções/campos omitidos mantêm o default de
+    `Projeto`.
     """
     projeto = Projeto()
     for secao, valores in entradas.items():

@@ -14,17 +14,16 @@ ABA_GEOMETRIA = "geometria"
 ABA_ATERRO = "solo_aterro"
 ABA_ENCOSTA = "solo_encosta"
 ABA_FUNDACAO = "solo_fundacao"
-ABA_FACE = "face"
 ABA_SOBRECARGA = "sobrecarga"
 ABA_REFORCO = "reforco"
-ABA_IDENTIFICACAO = "identificacao"
 
 # Abas que hoje não alimentam NENHUM método implementado — reservadas.
 # "Solo encosta" e "Solo fundação" saíram daqui quando a Estabilidade
 # Externa passou a consumi-las (solo retido / atrito e capacidade de
-# carga da fundação, respectivamente); "Face" segue sem nenhum método
-# que a leia.
-ABAS_RESERVADAS = (ABA_FACE,)
+# carga da fundação, respectivamente); "Face" e "Identificação" foram
+# removidas do modelo (não eram lidas por nenhum método), então hoje
+# não sobra nenhuma aba reservada.
+ABAS_RESERVADAS: tuple[str, ...] = ()
 
 # sigla do método (`MetodoAnalise.sigla`) -> {aba: (campos usados, ...)}.
 # Só entram abas efetivamente lidas por `calcular()`; abas em

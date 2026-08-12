@@ -1,9 +1,8 @@
-"""Diálogo 'Entrada de dados' com as 7 abas do programa original.
+"""Diálogo 'Entrada de dados' com as abas do programa original.
 
-Abas (na mesma ordem da tela original):
+Abas:
     Solo de aterro | Solo de encosta | Solo de fundação
-    Geometria da estrutura | Face da estrutura
-    Sobrecarga | Identificação do projeto
+    Geometria da estrutura | Sobrecarga | Reforço (geossintético)
 
 À direita fica o Esquema ilustrativo, que se atualiza ao vivo conforme
 o usuário edita os valores.
@@ -12,16 +11,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QTabWidget, QWidget, QFormLayout, QLineEdit, QDoubleSpinBox,
-    QCheckBox, QLabel, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox,
-    QSpinBox, QFrame,
+    QDialog, QTabWidget, QWidget, QFormLayout, QDoubleSpinBox,
+    QLabel, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox, QFrame,
 )
 
-from ...core.models import (
-    Projeto, Identificacao, Geometria, FaceEstrutura, Solo, Sobrecarga, Reforco,
-)
+from ...core.models import Projeto, Geometria, Solo, Sobrecarga, Reforco
 from .esquema_widget import EsquemaWidget
 
 
@@ -41,30 +36,6 @@ def _spin(val: float, decimals: int = 2, maximum: float = 1e6,
 # --------------------------------------------------------------------------- #
 # Abas individuais
 # --------------------------------------------------------------------------- #
-class _AbaIdentificacao(QWidget):
-    def __init__(self, ident: Identificacao):
-        super().__init__()
-        self.identificacao = QLineEdit(ident.identificacao)
-        self.empresa = QLineEdit(ident.empresa)
-        self.numero = QSpinBox()
-        self.numero.setRange(1, 9999)
-        self.numero.setValue(ident.numero_dimensionamento)
-        self.numero.setEnabled(False)
-        self.numero.setFixedWidth(90)
-
-        form = QFormLayout(self)
-        form.addRow("Identificação do projeto", self.identificacao)
-        form.addRow("Empresa", self.empresa)
-        form.addRow("Número do dimensionamento", self.numero)
-
-    def valores(self) -> Identificacao:
-        return Identificacao(
-            identificacao=self.identificacao.text(),
-            empresa=self.empresa.text(),
-            numero_dimensionamento=self.numero.value(),
-        )
-
-
 class _AbaGeometria(QWidget):
     def __init__(self, g: Geometria):
         super().__init__()
@@ -94,47 +65,6 @@ class _AbaGeometria(QWidget):
             inclinacao_encosta_beta_e_g=self.inclinacao_betae.value(),
             inclinacao_topo_i_g=self.inclinacao_i.value(),
             altura_topo_Ht_m=self.altura_Ht.value(),
-        )
-
-
-class _AbaFace(QWidget):
-    def __init__(self, f: FaceEstrutura):
-        super().__init__()
-        self.considera = QCheckBox("O projeto considera blocos de face")
-        self.considera.setChecked(f.considera_blocos)
-
-        self.altura = _spin(f.altura_blocos_cm or 0)
-        self.largura = _spin(f.largura_blocos_cm or 0)
-        self.recuo = _spin(f.recuo_blocos_cm or 0)
-
-        grp = QGroupBox()
-        form = QFormLayout(grp)
-        form.addRow("Altura dos blocos (cm)", self.altura)
-        form.addRow("Largura dos blocos (cm)", self.largura)
-        form.addRow("Recuo entre blocos (cm)", self.recuo)
-
-        obs = QLabel(
-            "Obs. Os blocos de face não são considerados elementos de contenção."
-        )
-        obs.setStyleSheet("color: #b00;")
-        obs.setWordWrap(True)
-
-        lay = QVBoxLayout(self)
-        lay.addWidget(self.considera)
-        lay.addWidget(grp)
-        lay.addWidget(obs)
-        lay.addStretch()
-
-        self.considera.toggled.connect(grp.setEnabled)
-        grp.setEnabled(f.considera_blocos)
-
-    def valores(self) -> FaceEstrutura:
-        on = self.considera.isChecked()
-        return FaceEstrutura(
-            considera_blocos=on,
-            altura_blocos_cm=self.altura.value() if on else None,
-            largura_blocos_cm=self.largura.value() if on else None,
-            recuo_blocos_cm=self.recuo.value() if on else None,
         )
 
 
@@ -262,20 +192,16 @@ class EntradaDadosDialog(QDialog):
         self.aba_fundacao = _AbaSolo(self.projeto.solo_fundacao,
                                       com_atrito_blocos=False)
         self.aba_geometria = _AbaGeometria(self.projeto.geometria)
-        self.aba_face = _AbaFace(self.projeto.face)
         self.aba_sobrecarga = _AbaSobrecarga(self.projeto.sobrecarga)
         self.aba_reforco = _AbaReforco(self.projeto.reforco)
-        self.aba_identif = _AbaIdentificacao(self.projeto.identificacao)
 
         tabs = QTabWidget()
         tabs.addTab(self.aba_aterro, "Solo de aterro")
         tabs.addTab(self.aba_encosta, "Solo de encosta")
         tabs.addTab(self.aba_fundacao, "Solo de fundação")
         tabs.addTab(self.aba_geometria, "Geometria da estrutura")
-        tabs.addTab(self.aba_face, "Face da estrutura")
         tabs.addTab(self.aba_sobrecarga, "Sobrecarga")
         tabs.addTab(self.aba_reforco, "Reforço (geossintético)")
-        tabs.addTab(self.aba_identif, "Identificação do projeto")
 
         # ---- esquema ilustrativo à direita ---- #
         esquema_box = QGroupBox("Esquema ilustrativo")
@@ -337,9 +263,7 @@ class EntradaDadosDialog(QDialog):
     def resultado(self) -> Projeto:
         """Retorna o Projeto consolidado após o OK."""
         return Projeto(
-            identificacao=self.aba_identif.valores(),
             geometria=self.aba_geometria.valores(),
-            face=self.aba_face.valores(),
             solo_aterro=self.aba_aterro.valores(),
             solo_encosta=self.aba_encosta.valores(),
             solo_fundacao=self.aba_fundacao.valores(),

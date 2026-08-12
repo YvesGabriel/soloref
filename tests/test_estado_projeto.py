@@ -41,11 +41,11 @@ def test_campo_de_reforco_editado_fica_sujo():
     assert projeto_sujo(atual, referencia) is True
 
 
-def test_identificacao_editada_fica_sujo():
+def test_campo_de_sobrecarga_editado_fica_sujo():
     referencia = Projeto()
     atual = replace(
         referencia,
-        identificacao=replace(referencia.identificacao, identificacao="Projeto X"),
+        sobrecarga=replace(referencia.sobrecarga, uniforme_q_kN_m2=15.0),
     )
     assert projeto_sujo(atual, referencia) is True
 

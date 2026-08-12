@@ -64,5 +64,8 @@ def test_estabilidade_externa_usa_encosta_e_fundacao():
     }
 
 
-def test_apenas_face_continua_reservada():
-    assert relevancia.ABAS_RESERVADAS == (relevancia.ABA_FACE,)
+def test_nenhuma_aba_reservada():
+    # "Face" e "Identificação" foram removidas do modelo (não eram lidas
+    # por nenhum método); "Solo encosta"/"Solo fundação" já tinham saído
+    # de ABAS_RESERVADAS com a Estabilidade Externa — não sobra nada.
+    assert relevancia.ABAS_RESERVADAS == ()

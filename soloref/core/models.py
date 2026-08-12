@@ -11,16 +11,6 @@ from typing import Optional
 
 
 # --------------------------------------------------------------------------- #
-# Aba: Identificação do projeto
-# --------------------------------------------------------------------------- #
-@dataclass
-class Identificacao:
-    identificacao: str = "(não especificado)"
-    empresa: str = "(não especificada)"
-    numero_dimensionamento: int = 1
-
-
-# --------------------------------------------------------------------------- #
 # Aba: Geometria da estrutura
 # --------------------------------------------------------------------------- #
 @dataclass
@@ -32,17 +22,6 @@ class Geometria:
     inclinacao_topo_i_g: float = 0.0   # Inclinação do talude de topo, i (graus)
     altura_topo_Ht_m: float = 0.0      # Altura do talude de topo, Ht (m)
     embutimento_m: float = 0.0       # Embutimento da fundação, D (m) — estabilidade externa
-
-
-# --------------------------------------------------------------------------- #
-# Aba: Face da estrutura
-# --------------------------------------------------------------------------- #
-@dataclass
-class FaceEstrutura:
-    considera_blocos: bool = False
-    altura_blocos_cm: Optional[float] = None
-    largura_blocos_cm: Optional[float] = None
-    recuo_blocos_cm: Optional[float] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -97,9 +76,7 @@ class Reforco:
 @dataclass
 class Projeto:
     """Agrega tudo que o usuário preenche em Entrada de Dados."""
-    identificacao: Identificacao = field(default_factory=Identificacao)
     geometria: Geometria = field(default_factory=Geometria)
-    face: FaceEstrutura = field(default_factory=FaceEstrutura)
     solo_aterro: Solo = field(
         default_factory=lambda: Solo(
             peso_especifico_kN_m3=20.0,

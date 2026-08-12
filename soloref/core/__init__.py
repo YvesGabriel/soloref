@@ -5,9 +5,7 @@ testados isoladamente e reutilizados em scripts ou outras interfaces.
 """
 from .models import (
     Projeto,
-    Identificacao,
     Geometria,
-    FaceEstrutura,
     Solo,
     Sobrecarga,
     Reforco,
@@ -15,9 +13,7 @@ from .models import (
 
 __all__ = [
     "Projeto",
-    "Identificacao",
     "Geometria",
-    "FaceEstrutura",
     "Solo",
     "Sobrecarga",
     "Reforco",

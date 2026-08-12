@@ -25,8 +25,7 @@ from . import interpretacao, relevancia
 from ..core.models import Projeto
 from ..core.methods.base import MetodoAnalise, Resultado
 from .dialogs.entrada_dados import (
-    _AbaSolo, _AbaGeometria, _AbaFace, _AbaSobrecarga, _AbaReforco,
-    _AbaIdentificacao,
+    _AbaSolo, _AbaGeometria, _AbaSobrecarga, _AbaReforco,
 )
 
 # Rótulo de aba -> chave usada em `relevancia.py`, na mesma ordem em que as
@@ -36,32 +35,12 @@ _ABAS_ORDENADAS = (
     ("Solo aterro", relevancia.ABA_ATERRO),
     ("Solo encosta", relevancia.ABA_ENCOSTA),
     ("Solo fundação", relevancia.ABA_FUNDACAO),
-    ("Face (reservado)", relevancia.ABA_FACE),
     ("Sobrecarga", relevancia.ABA_SOBRECARGA),
     ("Reforço", relevancia.ABA_REFORCO),
-    ("Identificação", relevancia.ABA_IDENTIFICACAO),
 )
-
-_AVISO_RESERVADA = "Estes campos ainda não entram em nenhum cálculo implementado."
 
 _COR_RELEVANTE = QColor("#0b3d91")
 _COR_ATENUADA = QColor("#9e9e9e")
-
-
-def _marcar_reservada(widget: QWidget) -> None:
-    """Insere um aviso discreto no topo de uma aba cujos campos nenhum
-    método implementado hoje consome (ver `relevancia.ABAS_RESERVADAS`)."""
-    aviso = QLabel(_AVISO_RESERVADA)
-    aviso.setWordWrap(True)
-    aviso.setStyleSheet(
-        "color: #8a6d00; background: #fff6da; border: 1px solid #e0c56a;"
-        " border-radius: 4px; padding: 4px; font-size: 11px;"
-    )
-    lay = widget.layout()
-    if isinstance(lay, QFormLayout):
-        lay.insertRow(0, aviso)
-    else:
-        lay.insertWidget(0, aviso)
 
 
 # --------------------------------------------------------------------------- #
@@ -106,11 +85,6 @@ _AJUDA = {
         "• c, φ, γ — capacidade de carga da fundação (fatores de Vésic).\n"
         "Os métodos internos ignoram esta aba."
     ),
-    "Face": (
-        "Blocos de face (altura, largura, recuo).\n"
-        "RESERVADO — estes campos ainda não entram em nenhum cálculo "
-        "implementado; os blocos não são considerados elementos de contenção."
-    ),
     "Sobrecarga": (
         "Cargas aplicadas no topo do aterro.\n"
         "• q — sobrecarga uniforme (kN/m²); usada por Rankine, Coulomb, Dois "
@@ -125,10 +99,6 @@ _AJUDA = {
         "e degradação (transformam Tult na tração admissível de longo prazo).\n"
         "• Ci — coeficiente de interação solo-reforço (arrancamento).\n"
         "• FS — fator de segurança de projeto (espaçamento e ancoragem)."
-    ),
-    "Identificação": (
-        "Identificação do projeto (nome, empresa, número do dimensionamento).\n"
-        "Não afeta nenhum cálculo — é só para o relatório/registro."
     ),
 }
 
@@ -157,7 +127,7 @@ def _adicionar_ajuda(widget: QWidget, titulo: str, texto: str) -> None:
 # Painel de dados (substitui o diálogo modal, mesmas abas)
 # --------------------------------------------------------------------------- #
 class PainelDados(QWidget):
-    """As oito abas de entrada, sempre visíveis, com atualização ao vivo."""
+    """As seis abas de entrada, sempre visíveis, com atualização ao vivo."""
 
     dadosAlterados = Signal()
 
@@ -187,20 +157,15 @@ class PainelDados(QWidget):
                         "empuxo motor (δ_ret=0 é o padrão conservador).",
         )
         self.aba_fundacao = _AbaSolo(projeto.solo_fundacao, com_atrito_blocos=False)
-        self.aba_face = _AbaFace(projeto.face)
         self.aba_sobrecarga = _AbaSobrecarga(projeto.sobrecarga)
         self.aba_reforco = _AbaReforco(projeto.reforco)
-        self.aba_identif = _AbaIdentificacao(projeto.identificacao)
 
         self._abas_widgets = (
             self.aba_geometria, self.aba_aterro, self.aba_encosta,
-            self.aba_fundacao, self.aba_face, self.aba_sobrecarga,
-            self.aba_reforco, self.aba_identif,
+            self.aba_fundacao, self.aba_sobrecarga, self.aba_reforco,
         )
         for widget, (rotulo, _chave) in zip(self._abas_widgets, _ABAS_ORDENADAS):
             self.tabs.addTab(widget, rotulo)
-
-        _marcar_reservada(self.aba_face)
 
         # Botão "?" de ajuda no topo de cada aba (ver _AJUDA).
         for w, tit in (
@@ -208,10 +173,8 @@ class PainelDados(QWidget):
             (self.aba_aterro, "Solo de aterro"),
             (self.aba_encosta, "Solo de encosta"),
             (self.aba_fundacao, "Solo de fundação"),
-            (self.aba_face, "Face"),
             (self.aba_sobrecarga, "Sobrecarga"),
             (self.aba_reforco, "Reforço"),
-            (self.aba_identif, "Identificação"),
         ):
             _adicionar_ajuda(w, tit, _AJUDA[tit])
 
@@ -224,8 +187,8 @@ class PainelDados(QWidget):
         O sinal serve dois propósitos: redesenhar o esquema ao vivo
         (só reage de fato a geometria/sobrecarga, que afetam o desenho) e
         marcar o projeto como "alterações não salvas" em `MainWindow`
-        (esse precisa saber de QUALQUER campo — φ, Tult, identificação,
-        etc. — não só dos que mudam o desenho). Por isso conecta tudo.
+        (esse precisa saber de QUALQUER campo — φ, Tult, etc. — não só dos
+        que mudam o desenho). Por isso conecta tudo.
         """
         spins = [
             self.aba_geometria.altura_H,
@@ -244,9 +207,6 @@ class PainelDados(QWidget):
             self.aba_reforco.rf_degradacao,
             self.aba_reforco.ci,
             self.aba_reforco.fs_alvo,
-            self.aba_face.altura,
-            self.aba_face.largura,
-            self.aba_face.recuo,
         ]
         for aba_solo in (self.aba_aterro, self.aba_encosta, self.aba_fundacao):
             spins.extend([aba_solo.peso, aba_solo.coesao, aba_solo.atrito])
@@ -255,17 +215,11 @@ class PainelDados(QWidget):
         for spin in spins:
             spin.valueChanged.connect(self.dadosAlterados)
 
-        self.aba_face.considera.toggled.connect(self.dadosAlterados)
-        self.aba_identif.identificacao.textChanged.connect(self.dadosAlterados)
-        self.aba_identif.empresa.textChanged.connect(self.dadosAlterados)
-
     # ------------------------------------------------------------------ #
     def destacar_metodo(self, sigla: str | None) -> None:
         """Realça as abas que o método ativo (`sigla` = `metodo.sigla`)
         consome e atenua as demais — ver `ui/relevancia.py`. `sigla=None`
-        (nenhum método ativo ainda) limpa o destaque. Abas reservadas
-        (`relevancia.ABAS_RESERVADAS`) nunca são relevantes para nenhum
-        método, então ficam sempre atenuadas.
+        (nenhum método ativo ainda) limpa o destaque.
         """
         relevantes = set(relevancia.abas_relevantes(sigla)) if sigla else set()
         tab_bar = self.tabs.tabBar()
@@ -290,9 +244,7 @@ class PainelDados(QWidget):
     def resultado(self) -> Projeto:
         """Projeto consolidado com os valores atuais de todas as abas."""
         return Projeto(
-            identificacao=self.aba_identif.valores(),
             geometria=self.aba_geometria.valores(),
-            face=self.aba_face.valores(),
             solo_aterro=self.aba_aterro.valores(),
             solo_encosta=self.aba_encosta.valores(),
             solo_fundacao=self.aba_fundacao.valores(),
