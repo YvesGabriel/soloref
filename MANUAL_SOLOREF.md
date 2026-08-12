@@ -31,7 +31,7 @@ A **Parte III** ("Próximos passos") está reservada e será preenchida depois.
 2. Conceitos fundamentais
 3. Instalação e primeiros passos
 4. A interface em cinco minutos
-5. Entrada de dados (as oito abas)
+5. Entrada de dados (as seis abas)
 6. O exemplo condutor
 7. Os métodos de cálculo
    - 7.1 Rankine · 7.2 Coulomb · 7.3 Dois Blocos · 7.4 Bishop · 7.5 Geossintéticos
@@ -144,7 +144,7 @@ Ajuda) e uma **navbar única** (toolbar, com os mesmos itens do menu
 Dimensionamento) com nomes completos, na ordem: **Entrada de dados**, os
 **cinco métodos** (Coulomb, Rankine, Dois Blocos, Bishop, Reforço com
 geossintéticos — funcionam como abas exclusivas: clicar troca o método ativo e
-recalcula), **Comparar métodos**, **Estabilidade externa** (reservado),
+recalcula), **Comparar métodos**, **Estabilidade externa** (seção 7.6),
 **Quadro Resumo** e **Relatórios**. Na base, a barra de status informa o que o
 programa está fazendo e mostra o resultado do último cálculo — ou o primeiro
 aviso de aplicabilidade do método, quando houver (seção 7).
@@ -156,6 +156,16 @@ bilinear (Dois Blocos), o círculo crítico (Bishop) ou as camadas de reforço
 (Geossintéticos) — com um rótulo curto (ex. "cunha 60,0°", "FS = 1,945").
 Editar um dado sem recalcular volta ao traço genérico, para não deixar na tela
 uma cunha desatualizada.
+
+O muro em si é desenhado em **escala real, proporcional entre H, B e Ht**: o
+programa calcula a caixa delimitadora de todos os pontos-chave da geometria e
+ajusta uma única escala para que ela caiba no painel — mudar B (ou H, ou Ht)
+muda visivelmente a largura/altura desenhada, em vez de só "reescalar" tudo de
+forma aproximada. Os ângulos β (face) e βe (encosta) sempre aparecem com a
+letra e um pequeno arco indicando a região do ângulo; i (inclinação do talude
+de topo) e Ht (altura do talude de topo) só aparecem — com cota e, no caso do
+i, arco também — quando diferentes de zero, já que um talude de topo é
+opcional na geometria.
 
 O fluxo típico é: entrar os dados (painel da esquerda, sempre visível), escolher
 um método na navbar para ver o resultado no painel da direita, e **Registrar no
@@ -172,12 +182,15 @@ podem levar um instante na primeira vez (ou depois de editar um dado) — nesse
 caso a barra de status mostra "Calculando <método>…" e o cursor vira uma
 ampulheta enquanto processa, para não parecer que o programa travou.
 
-## 5. Entrada de dados (as oito abas)
+## 5. Entrada de dados (as seis abas)
 
-O painel **Dados**, à esquerda da janela principal, tem oito abas sempre
+O painel **Dados**, à esquerda da janela principal, tem seis abas sempre
 visíveis — não é um diálogo separado: qualquer edição atualiza o esquema
 ilustrativo ao vivo e, se mudar algo em relação ao que está salvo, acende o
-"*" de alterações não salvas no título da janela (seção 9).
+"*" de alterações não salvas no título da janela (seção 9). As antigas abas
+"Face" e "Identificação" foram removidas: nenhum método as lia, e a
+identificação do projeto (nome, empresa) é redundante com o próprio arquivo
+salvo (seção 9) — hoje todas as abas alimentam algum cálculo.
 
 **As abas mudam de cor conforme o método ativo.** Cada método usa só um
 subconjunto dos dados — Rankine, por exemplo, não olha para o atrito
@@ -197,11 +210,6 @@ apoio (atrito de base e capacidade de carga). Por isso as duas ficam em
 destaque quando você seleciona Estabilidade externa na navbar, e voltam ao
 padrão nos outros métodos — acompanhe o negrito/cor conforme muda de método.
 
-**"Face" continua reservada.** É a única aba que nenhum método implementado
-hoje lê — mostra um aviso amarelo no topo lembrando disso. Os campos
-continuam lá, editáveis e salvos no projeto, só não entram em cálculo
-nenhum ainda.
-
 Os parâmetros, agrupados por aba:
 
 | Aba | Parâmetro | Significado |
@@ -219,14 +227,12 @@ Os parâmetros, agrupados por aba:
 | Solo de encosta | γ, c, φ | Solo **retido** atrás do bloco — gera o empuxo motor da estabilidade externa. |
 | | δ_ret | Atrito solo-muro do retido (0° = padrão conservador; muros de solo reforçado costumam usar δ_ret=φ). |
 | Solo de fundação | γ, c, φ | Solo de **apoio** — atrito de base e capacidade de carga da estabilidade externa. |
-| Face *(reservado)* | blocos | Se a face usa blocos, com altura/largura/recuo — nenhum método usa ainda. |
 | Sobrecarga | q | Sobrecarga uniforme no topo (kN/m²); soma ao peso das fatias do Bishop (seção 7.4), além de Rankine, Coulomb, Dois Blocos, geossintéticos e Estabilidade externa. |
 | | P, x₀, e | Carga linear (trem-tipo), posição e eixo. |
 | Reforço | Tult | Resistência à tração última do geossintético (kN/m). |
 | | RFcr, RFid, RFd | Fatores de redução — fluência, dano de instalação, degradação. |
 | | Ci | Coeficiente de interação (arrancamento). |
 | | FS | Fator de segurança de projeto do reforço — também usado para julgar o FS do Bishop (seção 7.4). |
-| Identificação | textos | Nome do projeto, empresa, número do dimensionamento. |
 
 Dica de aprendizado: altere φ e observe o esquema e, depois de calcular, o
 empuxo. Ver o Ea cair quando φ sobe fixa a intuição de que solo mais resistente
@@ -661,8 +667,10 @@ SoloRef/
 │       ├── estado_projeto.py     "há alterações não salvas?" (sem Qt)
 │       ├── cache_resultados.py   cache de Resultado por método (sem Qt)
 │       ├── geometria_segura.py   divisão segura por tangente p/ o esquema (sem Qt)
-│       └── dialogs/              esquema_widget, metodo_info, quadro_resumo,
-│                                  entrada_dados (abas reaproveitadas por panels.py)
+│       └── dialogs/              esquema_widget, quadro_resumo, entrada_dados
+│                                  (abas reaproveitadas por panels.py); metodo_info.py
+│                                  é resíduo — não usado (botão "Hipóteses / figura"
+│                                  removido, ver seção 15)
 ├── tests/
 │   ├── casos_literatura.py dataset de validação (fonte única de verdade)
 │   ├── test_*.py           testes por método + modelos + degenerescência +
@@ -696,12 +704,16 @@ cobre o resto: `dataclasses` (modelo de dados), `json` (persistência), `math`
 ## 14. Modelo de dados
 
 Em `core/models.py`, cada aba de entrada corresponde a uma `@dataclass`:
-`Identificacao`, `Geometria`, `FaceEstrutura`, `Solo` (usada três vezes — aterro,
-encosta, fundação), `Sobrecarga` e `Reforco` (parâmetros do geossintético). A
-classe `Projeto` agrega todas elas e é o objeto único que circula pelo programa:
-a UI o preenche, os métodos o consomem, a persistência o serializa. Os nomes dos
+`Geometria`, `Solo` (usada três vezes — aterro, encosta, fundação),
+`Sobrecarga` e `Reforco` (parâmetros do geossintético). A classe `Projeto`
+agrega todas elas e é o objeto único que circula pelo programa: a UI o
+preenche, os métodos o consomem, a persistência o serializa. Os nomes dos
 campos trazem a unidade embutida (por exemplo `peso_especifico_kN_m3`,
-`angulo_atrito_g`) para evitar ambiguidade e ficar perto da notação da literatura.
+`angulo_atrito_g`) para evitar ambiguidade e ficar perto da notação da
+literatura. `Identificacao` e `FaceEstrutura` (abas "Identificação" e "Face")
+foram removidas do modelo — não eram lidas por nenhum cálculo; `carregar()`
+em `persistence.py` ignora essas seções em arquivos `.soloref.json` salvos
+por versões antigas do programa, em vez de quebrar.
 
 `Geometria.embutimento_m` (default `0.0`) é o D usado pela estabilidade externa
 (capacidade de carga) — existe no modelo e na persistência desde já, mas ainda
@@ -712,7 +724,8 @@ esse campo ser exposto).
 
 Todo método herda de `MetodoAnalise` (em `methods/base.py`), que define o contrato
 mínimo: um atributo `nome`, uma `sigla`, uma tupla `hipoteses` (o texto mostrado
-na interface) e o método `calcular(projeto) -> Resultado`. O
+na caixa "Hipóteses do método", no rodapé do painel de resultados — seção 4) e
+o método `calcular(projeto) -> Resultado`. O
 `Resultado` é uma dataclass com campos comuns (`solicitacao_kN_m`,
 `inclinacao_cunha_g`, `fator_seguranca`) e um dicionário livre `extras` para os
 dados específicos de cada método (Ka, geometria crítica, lista de camadas, etc.).
@@ -756,7 +769,12 @@ consistência da validação.
 `dataclasses.asdict()` para serializar. O formato é texto legível, versionável em
 git e independente de plataforma — uma melhoria deliberada sobre o arquivo binário
 proprietário do programa original. Campos novos adicionados às dataclasses são
-serializados automaticamente, sem alterar a persistência.
+serializados automaticamente, sem alterar a persistência. Na direção contrária —
+campos ou seções que **saem** de uma dataclass (ex.: as extintas "face" e
+"identificacao") —, `carregar()` filtra cada seção do JSON pelos campos que a
+dataclass de destino realmente tem antes de reconstruí-la, então um arquivo
+`.soloref.json` salvo por uma versão antiga do programa continua abrindo sem
+erro, só ignorando o que não existe mais.
 
 ## 17. Testes e validação automática
 

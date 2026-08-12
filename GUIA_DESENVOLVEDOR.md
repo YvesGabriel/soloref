@@ -83,7 +83,7 @@ SoloRef/
 │   └── ui/                       ← INTERFACE (PySide6) — janela única de 3 painéis
 │       ├── __init__.py
 │       ├── main_window.py        ← janela, navbar única, cálculo (c/ cache), log
-│       ├── panels.py             ← PainelDados (8 abas) e PainelResultados (cartões)
+│       ├── panels.py             ← PainelDados (6 abas) e PainelResultados (cartões)
 │       ├── relevancia.py         ← SEM Qt: quais abas cada método consome
 │       ├── interpretacao.py      ← SEM Qt: cartões + selos de julgamento
 │       ├── resumo_map.py         ← SEM Qt: Resultado -> linhas do Quadro Resumo
@@ -127,8 +127,8 @@ SoloRef/
 
 | Arquivo | Função | Quando mexer |
 |---|---|---|
-| `models.py` | Define **todas as estruturas de dados** do projeto: `Identificacao`, `Geometria`, `FaceEstrutura`, `Solo`, `Sobrecarga`, `Reforco` (parâmetros do geossintético) e `Projeto` (que agrega tudo). São `@dataclass` — Python já gera `__init__`, `__repr__`, comparação, etc. | Quando adicionar um novo campo de entrada (ex.: nível d'água), uma nova categoria de solo, ou um novo tipo de sobrecarga. **Atenção:** mudar aqui geralmente exige mudança correspondente em `entrada_dados.py` (UI) e `persistence.py` (carregar arquivos antigos). |
-| `persistence.py` | Salva/carrega o `Projeto` em **JSON**. Usa `dataclasses.asdict()` para serializar. Formato legível, versionável em git, melhor que binário proprietário. `carregar()` usa `data.get(secao, {})` com fallback pros defaults da dataclass, para não quebrar ao abrir arquivos salvos antes de um campo/seção novo existir. | Se quiser mudar o formato do arquivo (ex.: YAML), versionar o schema, ou adicionar migração de versões antigas. **Sempre** que adicionar uma seção nova em `models.py`, adicionar aqui também (com o fallback), senão `carregar()` quebra em arquivos antigos. |
+| `models.py` | Define **todas as estruturas de dados** do projeto: `Geometria`, `Solo`, `Sobrecarga`, `Reforco` (parâmetros do geossintético) e `Projeto` (que agrega tudo). São `@dataclass` — Python já gera `__init__`, `__repr__`, comparação, etc. `Identificacao` e `FaceEstrutura` existiram aqui, mas foram removidas (nenhum método as lia). | Quando adicionar um novo campo de entrada (ex.: nível d'água), uma nova categoria de solo, ou um novo tipo de sobrecarga. **Atenção:** mudar aqui geralmente exige mudança correspondente em `entrada_dados.py` (UI) e `persistence.py` (carregar arquivos antigos — ver `_filtra_campos`, que ignora seções/campos desconhecidos ao carregar). |
+| `persistence.py` | Salva/carrega o `Projeto` em **JSON**. Usa `dataclasses.asdict()` para serializar. Formato legível, versionável em git, melhor que binário proprietário. `carregar()` usa `data.get(secao, {})` (seção ausente vira `{}`, os defaults da dataclass cobrem o resto) **e** `_filtra_campos(cls, dados)` (mantém só as chaves de `dados` que batem com `dataclasses.fields(cls)`) antes de reconstruir cada seção — então tanto uma seção inteira quanto um campo específico que saíram de uma dataclass (ex.: as extintas `face`/`identificacao`) são ignorados, em vez de quebrar com `TypeError`/`KeyError` ao abrir um arquivo antigo. | Se quiser mudar o formato do arquivo (ex.: YAML), versionar o schema, ou adicionar migração de versões antigas. **Sempre** que adicionar uma seção nova em `models.py`, adicionar aqui também (em `carregar()`), senão ela nunca é lida de volta — remover uma seção não exige nada aqui, `_filtra_campos` cuida sozinho. |
 | `__init__.py` | Reexporta as classes principais para que se possa fazer `from soloref.core import Projeto` sem precisar saber o caminho interno. | Quando criar um novo modelo importante. |
 
 ### 3.3 `soloref/core/methods/` — métodos de análise
@@ -303,12 +303,16 @@ a decisão completa) e **Registrar no quadro**.
 
 #### `dialogs/entrada_dados.py`
 
-As classes **`_Aba*`** (`_AbaIdentificacao`, `_AbaGeometria`, `_AbaFace`,
-`_AbaSolo`, `_AbaSobrecarga`, `_AbaReforco`) — cada uma com seu formulário e um
-método `valores()` que devolve a dataclass correspondente. São o que
-`panels.PainelDados` monta como as oito abas do painel de dados. `_AbaReforco`
-(Tult, RFcr, RFid, RFd, Ci, FS) é o exemplo real de "adicionar uma aba nova"
-que o cookbook da seção 5.2 descreve.
+As classes **`_Aba*`** (`_AbaGeometria`, `_AbaSolo`, `_AbaSobrecarga`,
+`_AbaReforco`) — cada uma com seu formulário e um método `valores()` que
+devolve a dataclass correspondente. São o que `panels.PainelDados` monta como
+as seis abas do painel de dados (`_AbaSolo` é reaproveitada três vezes:
+aterro, encosta, fundação). `_AbaReforco` (Tult, RFcr, RFid, RFd, Ci, FS) é o
+exemplo real de "adicionar uma aba nova" que o cookbook da seção 5.2 descreve.
+`_AbaFace` e `_AbaIdentificacao` existiram aqui, mas foram removidas junto com
+as dataclasses `FaceEstrutura`/`Identificacao` (`core/models.py`) e os campos
+`face`/`identificacao` de `Projeto` — nenhum método as lia, e a identificação
+do projeto é redundante com o próprio arquivo salvo.
 
 `_AbaSolo.__init__` aceita `com_atrito_blocos: bool` (mostra ou não o spinbox
 de ângulo de atrito entre blocos) e, desde a Estabilidade Externa,
@@ -342,6 +346,13 @@ que sobrescreve `paintEvent` e usa `QPainter` para desenhar:
 - A fundação (faixa marrom) e o corpo do muro (polígono que respeita H, β, B,
   βe, i, Ht) — transformação mundo→tela (`_transformacao`/`_w2s`) com origem
   no pé do muro, reaproveitada tanto pelo polígono quanto pelos overlays.
+  `_transformacao` é **fit-to-content**: `_bbox_mundo()` calcula a caixa
+  delimitadora real dos quatro pontos-chave (pé, topo da face, topo do
+  talude, pé da encosta) em metros, e uma única escala uniforme (mínimo dos
+  dois eixos) faz essa caixa caber na área disponível — descontadas margens
+  fixas em pixels reservadas pras cotas/setas/legendas ao redor — e fica
+  centralizada. Isso substituiu uma heurística antiga (`B * 2.2` fixo) em
+  que B não crescia de forma proporcional ao editar o campo.
 - **A superfície crítica do método ativo**, por cima do muro, quando há um
   resultado (`mostrar_resultado(sigla, resultado)` / `limpar_resultado()`):
   reta da cunha (Rankine/Coulomb, a partir de `inclinacao_cunha_g`), bilinear
@@ -351,7 +362,12 @@ que sobrescreve `paintEvent` e usa `QPainter` para desenhar:
   faltando algum dado), cai no traço tracejado genérico de antes — nunca
   lança exceção, é só desenho ilustrativo.
 - As setinhas da sobrecarga uniforme q, a seta vermelha do trem-tipo P, as
-  cotas H, Ht, B e os ângulos β, βe.
+  cotas H, B (sempre) e Ht/i (só quando ≠ 0 — um talude de topo é opcional),
+  e os ângulos β, βe e i, cada um com a letra **e** um pequeno arco
+  (`_arco_angulo`, via `QPainterPath.arcTo`) indicando a região do ângulo —
+  raio limitado a 18px e a 45% da aresta adjacente mais curta, e pontos
+  coincidentes (ex.: Ht=0 com βe=90°) são ignorados por não terem direção
+  definida.
 
 `MainWindow._calcular` chama `mostrar_resultado` depois de um cálculo
 bem-sucedido; `_dados_alterados` chama `limpar_resultado()` (dado mudou sem
@@ -364,6 +380,8 @@ recalcular → a cunha desenhada ficaria desatualizada).
 - Adicionar um overlay novo (ex.: nível d'água): seguir o padrão dos
   `_overlay_*` — um método que desenha em coordenadas de mundo via `_w2s` e
   devolve `True`/`False` (desenhou ou não).
+- Mudar as margens fixas reservadas ao redor do muro (cotas, setas, legendas):
+  `_PAD_ESQUERDA`/`_PAD_DIREITA`/`_PAD_TOPO`/`_PAD_BASE`, no topo da classe.
 - Mudar a representação da cunha/círculo/camadas conforme o método.
 
 #### `dialogs/metodo_info.py`
