@@ -15,7 +15,7 @@ nenhum da tela).
 from __future__ import annotations
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor, QFont, QPalette
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QWidget, QTabWidget, QTabBar, QVBoxLayout, QHBoxLayout, QGridLayout,
     QFormLayout, QLabel, QPushButton, QPlainTextEdit, QFrame, QMessageBox,
@@ -263,25 +263,22 @@ class PainelDados(QWidget):
         consome — ver `ui/relevancia.py`. `sigla=None` (nenhum método ativo
         ainda) limpa o destaque.
 
-        O destaque usa a cor de link da paleta do sistema (adapta sozinha
-        a tema claro/escuro, ao contrário de um azul fixo) **e** negrito —
-        cor sozinha não é um sinal confiável de acessibilidade (daltonismo,
-        telas mal calibradas), então o negrito garante que a aba relevante
-        continua identificável mesmo sem depender da cor. As abas não
-        relevantes voltam à cor e ao peso padrão do tema — nenhuma cor fixa.
+        O destaque é feito **só com negrito**, mantendo a cor padrão do tema
+        em todas as abas. Antes usava também a cor de link (azul), que na aba
+        selecionada se confundia com o azul de seleção; o negrito sozinho já
+        identifica a aba relevante, funciona em tema claro/escuro e não
+        depende de cor (acessível a daltonismo).
         """
         relevantes = set(relevancia.abas_relevantes(sigla)) if sigla else set()
         tab_bar = self.tabs.tabBar()
-        cor_relevante = self.palette().color(QPalette.Link)
         negrito: set[int] = set()
         for idx, (_rotulo, chave) in enumerate(_ABAS_ORDENADAS):
+            tab_bar.setTabTextColor(idx, QColor())  # cor padrão do tema
             if sigla is not None and chave in relevantes:
-                tab_bar.setTabTextColor(idx, cor_relevante)
                 negrito.add(idx)
                 campos = relevancia.campos_relevantes(sigla, chave)
                 tab_bar.setTabToolTip(idx, f"Usa: {', '.join(campos)}" if campos else "")
             else:
-                tab_bar.setTabTextColor(idx, QColor())  # cor padrão do tema
                 tab_bar.setTabToolTip(idx, "")
         if isinstance(tab_bar, _TabBarComNegrito):
             tab_bar.set_negrito(negrito)

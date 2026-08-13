@@ -234,8 +234,9 @@ class EsquemaWidget(QWidget):
         self._desenhar_setas_uniformes(p, P1, P2)
         self._desenhar_carga_linear(p, P1, P2, s.posicao_xo_m, scale)
 
-        # ---------- cotas / ângulos ---------- #
-        p.setPen(QPen(QColor("#0a8"), 1))
+        # ---------- cotas ---------- #
+        cor_cota = QColor("#333")  # tom escuro, boa leitura sobre o cinza
+        p.setPen(QPen(cor_cota, 1))
         font = QFont()
         font.setPointSize(8)
         p.setFont(font)
@@ -243,38 +244,37 @@ class EsquemaWidget(QWidget):
         p.drawLine(QPointF(x0 - 15, y0), QPointF(x0 - 15, P1.y()))
         p.drawText(QRectF(x0 - 35, (y0 + P1.y()) / 2 - 8, 18, 16),
                    Qt.AlignCenter, "H")
-        # Ht
+        # Ht (altura do talude de topo) — só quando há talude de topo
         if Ht > 0:
             p.drawLine(QPointF(P3.x() + 12, P3.y()),
                        QPointF(P3.x() + 12, P2.y()))
             p.drawText(QRectF(P3.x() + 14, (P3.y() + P2.y()) / 2 - 8, 20, 16),
                        Qt.AlignLeft, "Ht")
-        # B (largura aterro)
+        # B (largura do aterro)
         p.drawLine(QPointF(P1.x(), y0 + 18),
                    QPointF(P2.x(), y0 + 18))
         p.drawText(QRectF((P1.x() + P2.x()) / 2 - 10, y0 + 18, 20, 14),
                    Qt.AlignCenter, "B")
-        # i (inclinação do talude de topo) — só quando ≠ 0, mesmo critério
-        # usado pra "Ht" acima.
+
+        # ---------- ângulos (letra + arco na região correta) ---------- #
+        # Cada arco vai entre a HORIZONTAL para a direita (+x, lado do solo)
+        # e a aresta correspondente, no vértice do ângulo — assim mostra o
+        # valor do próprio ângulo (e não o suplemento).
+        # β — no pé do muro (P0), entre a base e a face (P0→P1).
+        p.drawText(QRectF(P0.x() + 10, P0.y() - 20, 16, 14), Qt.AlignLeft, "β")
+        self._arco_angulo(p, P0, QPointF(P0.x() + 40, P0.y()), P1, cor_cota)
+
+        # i — no topo da face (P1), entre a horizontal e o talude de topo
+        # (P1→P2). Só quando i ≠ 0.
         if abs(g.inclinacao_topo_i_g) > 1e-9:
-            meio_topo = QPointF((P1.x() + P2.x()) / 2.0, (P1.y() + P2.y()) / 2.0)
-            p.drawText(QRectF(meio_topo.x() - 10, meio_topo.y() - 22, 20, 16),
-                       Qt.AlignCenter, "i")
+            p.drawText(QRectF(P1.x() + 10, P1.y() - 20, 16, 14), Qt.AlignLeft, "i")
+            self._arco_angulo(p, P1, QPointF(P1.x() + 40, P1.y()), P2, cor_cota)
 
-        # ângulos β / βe / i — letra (já existia p/ β e βe) + arco pequeno
-        # indicando visualmente a região do ângulo entre a horizontal e a
-        # aresta correspondente.
-        cor_angulo = QColor("#0a8")
-        p.drawText(QRectF(P0.x() + 4, P0.y() - 16, 14, 14),
-                   Qt.AlignLeft, "β")
-        self._arco_angulo(p, P0, QPointF(P0.x() - 40, P0.y()), P1, cor_angulo)
-
-        p.drawText(QRectF(P3.x() - 14, y0 - 16, 14, 14),
-                   Qt.AlignRight, "βe")
-        self._arco_angulo(p, P2, QPointF(P2.x() + 40, P2.y()), P3, cor_angulo)
-
-        if abs(g.inclinacao_topo_i_g) > 1e-9:
-            self._arco_angulo(p, P1, QPointF(P1.x() + 40, P1.y()), P2, cor_angulo)
+        # βe — na base da encosta (P2), entre a horizontal e a encosta
+        # (P2→P3). Só quando há encosta (Ht > 0; senão P2 = P3).
+        if Ht > 0:
+            p.drawText(QRectF(P2.x() + 10, P2.y() - 20, 20, 14), Qt.AlignLeft, "βe")
+            self._arco_angulo(p, P2, QPointF(P2.x() + 40, P2.y()), P3, cor_cota)
 
         if avisos_desenho:
             self._desenhar_aviso_geometria(p, avisos_desenho)
