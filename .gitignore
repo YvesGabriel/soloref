@@ -4,3 +4,9 @@ venv/
 .pytest_cache/
 logs/
 RELATORIO_VALIDACAO.md
+.DS_Store
+trash/
+ia/
+Claude.md
+docs/
+Artigo/
